@@ -1,0 +1,393 @@
+% ==========================================================================
+%  COST_BREAKDOWN.tex
+%  Complete cost analysis for the GA Prompt Optimiser
+% ==========================================================================
+\documentclass[11pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{calc}
+\newcommand{\num}[1]{#1}  % plain number formatting
+
+\definecolor{conceptbg}{HTML}{EBF5FB}
+\definecolor{conceptframe}{HTML}{2980B9}
+\definecolor{savingbg}{HTML}{E8F5E9}
+\definecolor{savingframe}{HTML}{2E7D32}
+
+\newtcolorbox{conceptbox}[1]{
+  colback=conceptbg, colframe=conceptframe,
+  fonttitle=\bfseries, title={#1},
+  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
+}
+\newtcolorbox{savingbox}[1]{
+  colback=savingbg, colframe=savingframe,
+  fonttitle=\bfseries, title={#1},
+  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\leftmark}
+\fancyhead[R]{\small Cost Breakdown}
+\fancyfoot[C]{\thepage}
+
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{18pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-20pt}{30pt}
+
+\hypersetup{
+  colorlinks=true, linkcolor=blue!60!black,
+  urlcolor=blue!70!black,
+  pdftitle={Cost Breakdown -- GA Prompt Optimiser},
+  pdfauthor={Group 1},
+}
+
+\begin{document}
+
+% --- Title page ---
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries Cost Breakdown\par}
+\vspace{0.8cm}
+{\LARGE GA Prompt Optimiser for LLM Code Generation\par}
+\vspace{1.5cm}
+{\Large Complete API Cost Analysis with Official Pricing\par}
+\vspace{2cm}
+{\large Group 1\par}
+\vspace{0.5cm}
+{\large Computational Intelligence --- Spring 2026\par}
+\vspace{1cm}
+{\large\today\par}
+\vfill
+{\small All prices sourced from the official Anthropic API pricing page~\cite{anthropic-pricing}.\\
+Token measurements taken from the actual APPS dataset evolution pool.}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+
+% ======================================================================
+\chapter{Pricing Sources}
+% ======================================================================
+
+All prices in this document are sourced from the official Anthropic API pricing page, accessed April 2026~\cite{anthropic-pricing}.
+
+\section{Model Pricing (Standard API)}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Model} & {\textbf{Input (\$/MTok)}} & {\textbf{Output (\$/MTok)}} \\
+\midrule
+Claude Haiku 4.5 (\texttt{claude-haiku-4-5-20251001})   & 1.00  & 5.00  \\
+Claude Sonnet 4.6 (\texttt{claude-sonnet-4-6})           & 3.00  & 15.00 \\
+Claude Opus 4.6 (\texttt{claude-opus-4-6})               & 5.00  & 25.00 \\
+\bottomrule
+\end{tabular}
+\caption{Standard API pricing. MTok = million tokens. Source:~\cite{anthropic-pricing}.}
+\label{tab:standard-pricing}
+\end{table}
+
+\section{Batch API Pricing (50\% Discount)}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Model} & {\textbf{Input (\$/MTok)}} & {\textbf{Output (\$/MTok)}} \\
+\midrule
+Claude Haiku 4.5 (Batch)   & 0.50  & 2.50  \\
+Claude Sonnet 4.6 (Batch)  & 1.50  & 7.50  \\
+\bottomrule
+\end{tabular}
+\caption{Batch API pricing (50\% discount, asynchronous). Source:~\cite{anthropic-pricing}.}
+\label{tab:batch-pricing}
+\end{table}
+
+\begin{conceptbox}{Why two models?}
+\textbf{Haiku 4.5} generates code (cheap, deterministic at temperature~0) --- this is the model being optimised.
+\textbf{Sonnet 4.6} performs crossover and mutation (needs creativity, temperature~0.7) --- this is the evolutionary operator.
+97\% of the cost comes from Haiku calls; Sonnet is used sparingly.
+\end{conceptbox}
+
+
+% ======================================================================
+\chapter{Token Measurements}
+% ======================================================================
+
+Token sizes were \textbf{measured from real APPS data}, not estimated. The evolution pool of 100 problems was loaded and measured; solution files from the dataset were used to gauge output length.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+\textbf{Call type} & {\textbf{Input (tokens)}} & {\textbf{Output (tokens)}} & \textbf{How measured} \\
+\midrule
+Fitness (code gen)   & 280  & 138  & system prompt $\sim$48 + question $\sim$232 \\
+Crossover            & 350  & 100  & meta-prompt $\sim$150 + two parents $\sim$100 each \\
+Mutation (any type)  & 200  & 100  & meta-prompt $\sim$100 + one parent $\sim$100 \\
+\bottomrule
+\end{tabular}
+\caption{Measured token sizes per API call. Source: real APPS evolution pool.}
+\label{tab:tokens}
+\end{table}
+
+\subsection*{Measurement methodology}
+
+\begin{itemize}[nosep]
+  \item \textbf{Question length}: Average of \texttt{len(question)} for 100 sampled APPS problems, divided by 4 (chars-to-tokens approximation). Result: 876 chars $\approx$ 219 tokens. Plus system prompt ($\sim$48 tokens) and function-name suffix ($\sim$13 tokens) = 280 total input.
+  \item \textbf{Output length}: Average of \texttt{len(solution)} from 30 sampled \texttt{solutions.json} files, divided by 4. Result: 552 chars $\approx$ 138 tokens.
+  \item \textbf{Question range}: 164 -- 5{,}400 chars (41 -- 1{,}350 tokens). The 280-token average accounts for the full distribution.
+\end{itemize}
+
+
+% ======================================================================
+\chapter{API Call Counts}
+% ======================================================================
+
+\section{Derivation}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llrl@{}}
+\toprule
+\textbf{Phase} & \textbf{Model} & \textbf{Calls} & \textbf{Formula} \\
+\midrule
+Gen-0 fitness      & Haiku 4.5  & \num{1500}  & $15 \text{ pop} \times 100 \text{ problems}$ \\
+Gen 1--20 fitness   & Haiku 4.5  & \num{26000} & $13 \text{ offspring} \times 20 \text{ gen} \times 100$ \\
+Holdout evaluation  & Haiku 4.5  & \num{200}   & $1 \text{ best prompt} \times 200 \text{ problems}$ \\
+\midrule
+Crossover           & Sonnet 4.6 & \num{208}   & $13 \times 20 \times 0.80$ \\
+Mutation: inject    & Sonnet 4.6 & \num{65}    & $260 \times 0.25$ \\
+Mutation: delete    & Sonnet 4.6 & \num{39}    & $260 \times 0.15$ \\
+Mutation: rephrase  & Sonnet 4.6 & \num{26}    & $260 \times 0.10$ \\
+\midrule
+\textbf{Total Haiku}  & & \textbf{\num{27700}} & \\
+\textbf{Total Sonnet} & & \textbf{338} & \\
+\textbf{Grand Total}  & & \textbf{\num{28038}} & \\
+\bottomrule
+\end{tabular}
+\caption{API call counts by phase.}
+\label{tab:calls}
+\end{table}
+
+\subsection*{Key assumptions}
+
+\begin{itemize}[nosep]
+  \item Population size = 15, elitism = 2 $\Rightarrow$ 13 new offspring per generation.
+  \item Total offspring across 20 generations = $13 \times 20 = 260$.
+  \item Crossover rate = 0.80, so $\sim$208 crossover calls.
+  \item Mutation probabilities are independent per offspring: inject~0.25, delete~0.15, rephrase~0.10.
+  \item Elite individuals are \emph{not} re-evaluated (fitness carried from previous generation).
+\end{itemize}
+
+
+% ======================================================================
+\chapter{Full Cost Breakdown}
+% ======================================================================
+
+\section{Token Totals}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Model} & {\textbf{Input tokens}} & {\textbf{Output tokens}} & {\textbf{Total tokens}} \\
+\midrule
+Haiku 4.5  & 7756000  & 3822600  & 11578600  \\
+Sonnet 4.6 & 98800    & 33800    & 132600    \\
+\midrule
+\textbf{Combined} & \textbf{7854800} & \textbf{3856400} & \textbf{11711200} \\
+\bottomrule
+\end{tabular}
+\caption{Token totals. Haiku: $\num{27700} \times 280 / \num{27700} \times 138$. Sonnet: $208 \times 350 + 130 \times 200$ / $(208 + 130) \times 100$.}
+\end{table}
+
+\section{Cost by Component}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lrrrl@{}}
+\toprule
+\textbf{Component} & {\textbf{Input cost}} & {\textbf{Output cost}} & {\textbf{Total}} & \textbf{Share} \\
+\midrule
+Haiku 4.5 (fitness + holdout) & 7.76 & 19.11 & 26.87 & 97.1\% \\
+Sonnet 4.6 (operators)        & 0.30 & 0.51  & 0.80  & 2.9\%  \\
+\midrule
+\textbf{Grand Total}          & \textbf{8.05} & \textbf{19.62} & \textbf{27.67} & 100\% \\
+\bottomrule
+\end{tabular}
+\caption{Cost breakdown by model. All prices in USD.}
+\label{tab:cost-breakdown}
+\end{table}
+
+\begin{conceptbox}{Where the money goes}
+\textbf{97\% of the cost is Haiku fitness evaluation} (code generation). Output tokens dominate because Haiku output (\$5/MTok) is 5$\times$ more expensive than input (\$1/MTok), and code generation produces substantial output. The Sonnet operators (crossover + mutation) are negligible at \$0.80 total despite Sonnet being 3$\times$ more expensive per token.
+\end{conceptbox}
+
+\section{Cost per Generation}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Component} & {\textbf{Cost per generation}} \\
+\midrule
+Fitness (13 offspring $\times$ 100 problems)  & 1.26 \\
+Operators (crossover + mutations)             & 0.04 \\
+\midrule
+\textbf{Total per generation}                 & \textbf{1.30} \\
+\bottomrule
+\end{tabular}
+\caption{Cost per generation (gen 1--20). Gen 0 costs \$1.46 (all 15 seeds evaluated).}
+\end{table}
+
+\section{Summary Table}
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+Total API calls              & \num{28038} \\
+Total input tokens           & \num{7854800} \\
+Total output tokens          & \num{3856400} \\
+Total input cost             & \$8.05 \\
+Total output cost            & \$19.62 \\
+\midrule
+\textbf{Grand total cost}    & \textbf{\$27.67} \\
+\midrule
+Estimated wall-clock time    & $\sim$15.4 hours \\
+Cost per generation          & \$1.30 \\
+\bottomrule
+\end{tabular}
+\caption{Grand summary --- full 20-generation run.}
+\label{tab:summary}
+\end{table}
+
+
+% ======================================================================
+\chapter{Optimisation Options}
+% ======================================================================
+
+\section{Three Levers to Reduce Cost}
+
+\begin{enumerate}
+  \item \textbf{Reduce evolution pool size} (100 $\rightarrow$ 50 or 75 problems): Halves or reduces fitness calls proportionally. GAAPO~\cite{gaapo} showed that bandit-based selection with 50 samples matched full evaluation quality.
+  \item \textbf{Reduce generations} (20 $\rightarrow$ 10 or 15): GAAPO found that larger populations with fewer generations outperformed smaller populations with more generations~\cite{gaapo}.
+  \item \textbf{Batch API} (50\% off Haiku): Processes calls asynchronously. Fitness evaluation is embarrassingly parallel --- all 100 problems per individual are independent.
+\end{enumerate}
+
+\section{Optimised Configurations}
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lcccrrl@{}}
+\toprule
+\textbf{Config} & \textbf{Pop} & \textbf{Gen} & \textbf{EvoPool} & {\textbf{Cost}} & {\textbf{Hours}} & {\textbf{Savings}} \\
+\midrule
+Full run (current)    & 15 & 20 & 100 & 27.67 & 15.4 & {---} \\
+\midrule
+Option A (cheapest)   & 10 & 15 & 50  & 6.77  & 3.7  & 75\% \\
+Option B (balanced)   & 12 & 15 & 75  & 12.39 & 6.8  & 55\% \\
+Option C (half gens)  & 15 & 10 & 100 & 14.66 & 8.2  & 47\% \\
+Option D (half pool)  & 15 & 20 & 50  & 14.24 & 7.7  & 49\% \\
+\bottomrule
+\end{tabular}
+\caption{Optimised configurations with cost and time estimates.}
+\label{tab:options}
+\end{table}
+
+\begin{savingbox}{Recommended: Option B (\$12.39, 6.8 hours)}
+Pop=12, Gen=15, EvoPool=75, Holdout=150. Fits within a \$15 budget and 10 hours of wall-clock time. Can be run twice with different seeds for \$25 total and 13.6 hours, providing reproducibility. Changes only 4 lines in \texttt{config.py}.
+\end{savingbox}
+
+\section{Batch API Impact}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Configuration} & {\textbf{Standard API}} & {\textbf{With Batch API}} \\
+\midrule
+Full run (Pop=15, Gen=20, Pool=100)     & 27.67 & 14.24 \\
+Option B (Pop=12, Gen=15, Pool=75)      & 12.39 & 6.39  \\
+\bottomrule
+\end{tabular}
+\caption{Cost with Batch API (50\% off Haiku). Sonnet operators are unchanged.}
+\end{table}
+
+
+% ======================================================================
+\chapter{Runtime Cost Tracking}
+% ======================================================================
+
+The \texttt{cost\_tracker.py} module (see Code Explanation document) automatically logs every API call's exact token count and computes the real cost. After each run, a JSON file is saved to \texttt{Costs/cost\_<timestamp>.json} with this structure:
+
+\begin{verbatim}
+{
+  "grand_total_usd": 27.67,
+  "breakdown_by_phase": {
+    "fitness":        { "calls": 27700, "total_cost_usd": 26.87 },
+    "crossover":      { "calls": 208,   "total_cost_usd": 0.53 },
+    "mutate_inject":  { "calls": 65,    "total_cost_usd": 0.14 },
+    "mutate_delete":  { "calls": 39,    "total_cost_usd": 0.08 },
+    "mutate_rephrase":{ "calls": 26,    "total_cost_usd": 0.06 }
+  },
+  "breakdown_by_model": {
+    "claude-haiku-4-5-20251001": { "total_cost_usd": 26.87 },
+    "claude-sonnet-4-6":         { "total_cost_usd": 0.80 }
+  }
+}
+\end{verbatim}
+
+Each run creates a \textbf{new file} --- they never overwrite. This gives a full cost history across all experiments. The \texttt{grand\_total\_usd} figure in each file is the \emph{actual measured cost} (from real API token counts), not an estimate.
+
+
+% ======================================================================
+%  REFERENCES
+% ======================================================================
+\begin{thebibliography}{9}
+
+\bibitem{anthropic-pricing}
+Anthropic, ``Pricing --- Claude API Docs,''
+\url{https://docs.anthropic.com/en/docs/about-claude/pricing},
+accessed April 2026.
+
+\bibitem{gaapo}
+X.~S\'{e}cheresse, J.-Y.~Guilbert-Ly, and A.~Villedieu de Torcy,
+``GAAPO: Genetic algorithmic applied to prompt optimization,''
+\emph{Frontiers in Artificial Intelligence}, vol.~8, Art.~no.~1613007, Sep.~2025,
+\url{https://doi.org/10.3389/frai.2025.1613007}.
+
+\bibitem{evoprompt}
+Q.~Guo \emph{et al.},
+``Connecting large language models with evolutionary algorithms yields powerful prompt optimizers,''
+in \emph{Proc.\ ICLR}, 2024.
+
+\bibitem{apps}
+D.~Hendrycks \emph{et al.},
+``Measuring coding challenge competence with APPS,''
+\emph{NeurIPS Datasets and Benchmarks}, 2021,
+\url{https://arxiv.org/abs/2105.09938}.
+
+\end{thebibliography}
+
+\end{document}
