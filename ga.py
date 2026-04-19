@@ -52,8 +52,8 @@ def compute_fitness(individual: Individual, problems: list[dict]) -> float:
     Evaluate a prompt on the evolution pool.
 
     For each problem:
-        1. LLM generates code using the candidate prompt as system instruction.
-        2. Code is extracted and executed against all test cases.
+        1. LLM generates a complete C++ program using the candidate prompt.
+        2. Code is extracted, compiled with g++, and run against test cases.
         3. Score = fraction of test cases passed  (partial credit).
 
     Fitness = mean score across all problems.
@@ -63,12 +63,10 @@ def compute_fitness(individual: Individual, problems: list[dict]) -> float:
         response = llm.generate_code(
             system_prompt=individual.prompt,
             question=prob["question"],
-            fn_name=prob["fn_name"],
         )
         code = evaluator.extract_code(response)
         score = evaluator.run_tests(
             code=code,
-            fn_name=prob["fn_name"],
             inputs=prob["inputs"],
             outputs=prob["outputs"],
             timeout=config.EXEC_TIMEOUT,
@@ -100,13 +98,13 @@ def breed(
     Produce one offspring from two parents.
 
     1. Crossover (probability CROSSOVER_RATE):
-       The optimizer LLM merges the two parent prompts.
-       If skipped, the offspring copies a random parent's prompt.
+        The optimizer LLM merges the two parent prompts.
+        If skipped, the offspring copies a random parent's prompt.
 
     2. Mutation (three independent rolls per offspring):
-       - inject   (0.25) — LLM adds a new instructional strategy
-       - delete   (0.15) — LLM removes the weakest sentence
-       - rephrase (0.10) — LLM rewrites without changing meaning
+        - inject   (0.25) — LLM adds a new instructional strategy
+        - delete   (0.15) — LLM removes the weakest sentence
+        - rephrase (0.10) — LLM rewrites without changing meaning
 
     Returns an unevaluated Individual (fitness = -1).
     """
@@ -155,7 +153,7 @@ def run(
         seed_prompts   — initial population prompts (len == POPULATION_SIZE)
         problems       — evolution pool (100 APPS problems)
         on_generation  — optional callback(gen: int, population, stats)
-                         called after each generation for checkpointing
+                        called after each generation for checkpointing
 
     Returns:
         (best_individual, history)

@@ -1,37 +1,46 @@
 """
-evaluator.py — Code extraction and sandboxed test-case execution.
+evaluator.py — C++ code extraction, compilation, and sandboxed test execution.
 
-Execution model (Codewars APPS fn_name problems):
-    inputs[i]  = Python list already parsed, e.g. [1] or ["hello", 2]
-    outputs[i] = [expected_return_value], e.g. [5] or [True]
+Execution model (Codeforces stdin/stdout problems):
+    inputs[i]  = raw string piped to the compiled binary's stdin
+    outputs[i] = expected string on stdout
 
-    result = fn_name(*inputs[i])
-    passed = ([result] == outputs[i])
+For each test case:
+    1. Run the compiled binary with inputs[i] on stdin.
+    2. Compare stdout against outputs[i] (whitespace-normalised per line).
 
-Fitness = (test cases passed) / (total test cases)   — partial credit.
+Fitness = (test cases passed) / (test cases evaluated) — partial credit.
 """
 
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from typing import Optional
+
+import config
 
 
 # ---------------------------------------------------------------------------
-# Code extraction
+# Code extraction  (C++ fenced blocks, then any block, then raw text)
 # ---------------------------------------------------------------------------
 
 def extract_code(response: str) -> str:
     """
-    Pull the Python code block out of an LLM response.
-    Tries ```python … ``` first, then any ``` … ```, then the raw text.
+    Pull C++ code out of an LLM response.
+
+    Priority:
+        1. ```cpp … ``` or ```c++ … ```
+        2. Any ``` … ``` block
+        3. Raw response text (assume entire reply is code)
     """
-    # Markdown fenced code block with python tag
-    m = re.search(r"```python\s*\n([\s\S]*?)```", response)
+    # C++ tagged block
+    m = re.search(r"```(?:cpp|c\+\+)\s*\n([\s\S]*?)```", response, re.IGNORECASE)
     if m:
         return m.group(1).strip()
 
-    # Any fenced code block
+    # Any fenced block
     m = re.search(r"```\s*\n?([\s\S]*?)```", response)
     if m:
         return m.group(1).strip()
@@ -40,83 +49,119 @@ def extract_code(response: str) -> str:
     return response.strip()
 
 
-def has_function(code: str, fn_name: str) -> bool:
-    """Return True if `def fn_name(` appears in the code."""
-    return bool(re.search(rf"\bdef\s+{re.escape(fn_name)}\s*\(", code))
+# ---------------------------------------------------------------------------
+# Output normalisation
+# ---------------------------------------------------------------------------
+
+def _normalise(text: str) -> list[str]:
+    """Strip trailing whitespace from every line; drop trailing blank lines."""
+    lines = text.rstrip("\n").split("\n")
+    return [line.rstrip() for line in lines]
+
+
+def _outputs_match(actual: str, expected: str) -> bool:
+    return _normalise(actual) == _normalise(expected)
 
 
 # ---------------------------------------------------------------------------
-# Subprocess test runner
+# g++ compilation
 # ---------------------------------------------------------------------------
 
-_HARNESS_TEMPLATE = """\
-import sys
-sys.set_int_max_str_digits(1_000_000)
+def _compile(code: str) -> tuple[Optional[str], str]:
+    """
+    Write code to a temp .cpp file and compile with g++.
 
-{code}
-
-def __run__(inp, expected):
+    Returns:
+        (binary_path, "")          on success
+        (None,        error_msg)   on failure
+    """
+    src_fd, src_path = tempfile.mkstemp(suffix=".cpp")
+    bin_path = src_path[:-4]   # strip .cpp
     try:
-        result = {fn_name}(*inp)
-        sys.stdout.write("__R__:" + ("1" if [result] == expected else "0") + "\\n")
-        sys.stdout.flush()
+        with os.fdopen(src_fd, "w") as f:
+            f.write(code)
+
+        result = subprocess.run(
+            ["g++", "-O2", "-std=c++17", "-o", bin_path, src_path],
+            capture_output=True,
+            text=True,
+            timeout=config.COMPILE_TIMEOUT,
+        )
+
+        if result.returncode != 0:
+            return None, result.stderr[:500]
+
+        return bin_path, ""
+
+    except subprocess.TimeoutExpired:
+        return None, "compilation timed out"
+    except FileNotFoundError:
+        return None, "g++ not found on PATH"
+    except Exception as exc:
+        return None, str(exc)
+    finally:
+        try:
+            os.unlink(src_path)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Test-case runner
+# ---------------------------------------------------------------------------
+
+def _run_one(bin_path: str, stdin_str: str, timeout: int) -> Optional[str]:
+    """Run the compiled binary with stdin_str; return stdout or None on failure."""
+    try:
+        result = subprocess.run(
+            [bin_path],
+            input=stdin_str,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return result.stdout
+    except subprocess.TimeoutExpired:
+        return None
     except Exception:
-        sys.stdout.write("__R__:0\\n")
-        sys.stdout.flush()
-
-{calls}
-"""
+        return None
 
 
-def _build_script(code: str, fn_name: str, inputs: list, outputs: list) -> str:
-    """Build the standalone test script that will be executed in a subprocess."""
-    call_lines = "\n".join(
-        f"__run__({repr(inp)}, {repr(out)})"
-        for inp, out in zip(inputs, outputs)
-    )
-    return _HARNESS_TEMPLATE.format(
-        code=code,
-        fn_name=fn_name,
-        calls=call_lines,
-    )
-
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 def run_tests(
     code: str,
-    fn_name: str,
     inputs: list,
     outputs: list,
     timeout: int = 5,
 ) -> float:
     """
-    Execute generated code against all test cases in an isolated subprocess.
+    Compile the C++ code and run it against up to MAX_TEST_CASES test cases.
 
-    Returns partial-credit score: (passed tests) / (total tests).
-    Returns 0.0 on any execution error, timeout, or missing function.
+    Returns partial-credit score: (passed) / (evaluated).
+    Returns 0.0 on empty code, compilation failure, or all timeouts.
     """
-    if not code or not has_function(code, fn_name):
+    if not code or not code.strip():
         return 0.0
 
-    script = _build_script(code, fn_name, inputs, outputs)
+    bin_path, err = _compile(code)
+    if bin_path is None:
+        return 0.0
 
     try:
-        proc = subprocess.run(
-            [sys.executable, "-c", script],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        # Parse only our sentinel lines to ignore any stray print() in generated code
-        results = [
-            int(line[len("__R__:"):])
-            for line in proc.stdout.splitlines()
-            if line.startswith("__R__:")
-        ]
-        if not results:
-            return 0.0
-        return sum(results) / len(inputs)   # partial credit over ALL test cases
+        n = min(len(inputs), config.MAX_TEST_CASES)
+        passed = 0
+        for i in range(n):
+            actual = _run_one(bin_path, inputs[i], timeout)
+            if actual is not None and _outputs_match(actual, outputs[i]):
+                passed += 1
 
-    except subprocess.TimeoutExpired:
-        return 0.0
-    except Exception:
-        return 0.0
+        return passed / n if n > 0 else 0.0
+
+    finally:
+        try:
+            os.unlink(bin_path)
+        except OSError:
+            pass

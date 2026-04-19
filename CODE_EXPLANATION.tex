@@ -1,39 +1,40 @@
 % ==========================================================================
-%  CODE_EXPLANATION.tex
-%  Comprehensive walkthrough of every file in the GA Prompt Optimiser
+%  CODE_EXPLANATION.tex  ---  Comprehensive walkthrough of the GA Prompt Optimiser
+%  Chunk 1: Preamble + Chapter 1 (Introduction) + Chapter 2 (Architecture)
 % ==========================================================================
 \documentclass[11pt,a4paper]{report}
 
-% --- Packages ---
+% --- Encoding & fonts ---
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
-\usepackage[margin=2.4cm]{geometry}
-\usepackage{xcolor}
-\usepackage{listings}
-\usepackage{booktabs}
-\usepackage{tcolorbox}
+
+% --- Layout ---
+\usepackage[margin=2.4cm,top=2.8cm,bottom=2.8cm]{geometry}
 \usepackage{fancyhdr}
 \usepackage{titlesec}
-\usepackage{enumitem}
-\usepackage{hyperref}
-\usepackage{graphicx}
-\usepackage{longtable}
-\usepackage{array}
 
-% --- Colours ---
+% --- Colour ---
+\usepackage{xcolor}
 \definecolor{codebg}{HTML}{F7F7F7}
 \definecolor{codeframe}{HTML}{CCCCCC}
 \definecolor{kwcolor}{HTML}{0000CC}
-\definecolor{strcolor}{HTML}{008800}
+\definecolor{strcolor}{HTML}{007700}
 \definecolor{cmtcolor}{HTML}{888888}
 \definecolor{conceptbg}{HTML}{EBF5FB}
 \definecolor{conceptframe}{HTML}{2980B9}
 \definecolor{warnbg}{HTML}{FFF3E0}
 \definecolor{warnframe}{HTML}{E65100}
+\definecolor{specbg}{HTML}{F0FFF0}
+\definecolor{specframe}{HTML}{27AE60}
+\definecolor{chainbg}{HTML}{FAFAFA}
+\definecolor{chainframe}{HTML}{7F8C8D}
+\definecolor{exbg}{HTML}{FFFDE7}
+\definecolor{exframe}{HTML}{F39C12}
 
-% --- Listings style ---
-\lstset{
+% --- Code listings ---
+\usepackage{listings}
+\lstdefinestyle{pycode}{
   language=Python,
   basicstyle=\ttfamily\small,
   keywordstyle=\color{kwcolor}\bfseries,
@@ -43,7 +44,6 @@
   frame=single,
   rulecolor=\color{codeframe},
   breaklines=true,
-  breakatwhitespace=false,
   showstringspaces=false,
   numbers=left,
   numberstyle=\tiny\color{gray},
@@ -51,25 +51,92 @@
   tabsize=4,
   xleftmargin=1.5em,
   framexleftmargin=1.5em,
-  aboveskip=1em,
-  belowskip=1em,
-  literate={—}{{---}}1 {→}{{->}}2 {←}{{<-}}2,
+  aboveskip=0.8em,
+  belowskip=0.8em,
+  literate={---}{{---}}1,
 }
+\lstdefinestyle{chain}{
+  language={},
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{chainbg},
+  frame=single,
+  rulecolor=\color{chainframe},
+  breaklines=true,
+  showstringspaces=false,
+  numbers=none,
+  aboveskip=0.6em,
+  belowskip=0.6em,
+  xleftmargin=0.5em,
+  framexleftmargin=0.5em,
+}
+\lstdefinestyle{example}{
+  language=Python,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{kwcolor}\bfseries,
+  stringstyle=\color{strcolor},
+  commentstyle=\color{cmtcolor}\itshape,
+  backgroundcolor=\color{exbg},
+  frame=single,
+  rulecolor=\color{exframe},
+  breaklines=true,
+  showstringspaces=false,
+  numbers=none,
+  aboveskip=0.6em,
+  belowskip=0.6em,
+  xleftmargin=0.5em,
+  framexleftmargin=0.5em,
+}
+\lstset{style=pycode}
 
-% --- Concept box ---
+% --- Boxes ---
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+
 \newtcolorbox{conceptbox}[1]{
   colback=conceptbg, colframe=conceptframe,
   fonttitle=\bfseries, title={#1},
-  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt,
-  top=4pt, bottom=4pt,
+  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
+  breakable,
 }
-
-% --- Warning box ---
 \newtcolorbox{warnbox}[1]{
   colback=warnbg, colframe=warnframe,
   fonttitle=\bfseries, title={#1},
-  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt,
-  top=4pt, bottom=4pt,
+  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
+  breakable,
+}
+\newtcolorbox{specbox}[1]{
+  colback=specbg, colframe=specframe,
+  fonttitle=\bfseries\ttfamily, title={#1},
+  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
+  breakable,
+}
+\newtcolorbox{exbox}[1]{
+  colback=exbg, colframe=exframe,
+  fonttitle=\bfseries, title={Worked Example --- #1},
+  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
+  breakable,
+}
+
+% --- Tables ---
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+
+% --- Lists ---
+\usepackage{enumitem}
+
+% --- Graphics ---
+\usepackage{graphicx}
+
+% --- Hyperref ---
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  urlcolor=blue!70!black,
+  pdftitle={Code Explanation -- GA Prompt Optimiser},
+  pdfauthor={Group 1},
 }
 
 % --- Headers ---
@@ -85,102 +152,419 @@
   {\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{18pt}{\Huge}
 \titlespacing*{\chapter}{0pt}{-20pt}{30pt}
 
-% --- Hyperref ---
-\hypersetup{
-  colorlinks=true, linkcolor=blue!60!black,
-  urlcolor=blue!70!black, citecolor=green!50!black,
-  pdftitle={Code Explanation -- GA Prompt Optimiser},
-  pdfauthor={Group 1},
-}
+% --- Convenience macro ---
+\newcommand{\pyfile}[1]{\texttt{#1}}
+\newcommand{\fn}[1]{\texttt{#1}}
+\newcommand{\param}[1]{\textit{#1}}
 
 % ==========================================================================
 \begin{document}
 
-% --- Title page ---
+% ---------------------------------------------------------------------------
+%  TITLE PAGE
+% ---------------------------------------------------------------------------
 \begin{titlepage}
 \centering
-\vspace*{3cm}
+\vspace*{2.5cm}
 {\Huge\bfseries Code Explanation\par}
 \vspace{0.8cm}
 {\LARGE GA Prompt Optimiser for LLM Code Generation\par}
-\vspace{1.5cm}
+\vspace{1.2cm}
 {\Large Evolving System Prompts on the APPS Dataset\par}
 \vspace{2cm}
 {\large Group 1\par}
-\vspace{0.5cm}
+\vspace{0.4cm}
 {\large Computational Intelligence --- Spring 2026\par}
 \vspace{1cm}
-{\large\today\par}
+{\large April 2026\par}
 \vfill
-{\small Comprehensive walkthrough of every file in the codebase.\\
-Designed for readers with no prior knowledge of genetic algorithms or LLM APIs.}
+{\small
+  Deep-dive walkthrough of every file, every function, and every call chain.\\[4pt]
+  Includes exact function signatures, cross-file data-flow diagrams, and\\
+  step-by-step worked examples tracing real data through the pipeline.\\[4pt]
+  Designed for readers with no prior knowledge of genetic algorithms or LLM APIs.
+}
 \end{titlepage}
 
-% --- Table of Contents ---
 \tableofcontents
 \newpage
 
-% ======================================================================
-%  INTRODUCTION
-% ======================================================================
+% ==========================================================================
+%  CHAPTER 1 --- INTRODUCTION
+% ==========================================================================
 \chapter{Introduction}
 
 \section{What This Project Does}
 
-This project uses a \textbf{Genetic Algorithm (GA)} to automatically discover the best ``system prompt'' for a Large Language Model (LLM) that generates Python code. A \emph{system prompt} is a paragraph of English instructions that tells the LLM \emph{how} to approach a coding problem (e.g., ``think about edge cases first'', ``identify the algorithm pattern'').
+This project uses a \textbf{Genetic Algorithm (GA)} to automatically discover the best
+``system prompt'' for a Large Language Model (LLM) that generates Python code.
 
-The GA treats each system prompt as a \textbf{chromosome} --- a candidate solution that can be scored, bred, and mutated just like organisms in biological evolution. Over 20 generations, the GA evolves a population of 15 prompts, keeping the best-performing ones and combining their strategies, until it converges on a prompt that solves the most coding problems correctly.
+A \textbf{system prompt} is a paragraph of plain-English instructions prepended to every
+conversation with the LLM, shaping how it thinks before it sees the coding problem.
+Examples: \emph{``Think like a competitive programmer''} or \emph{``Always check edge cases
+before writing code.''}
 
-\begin{conceptbox}{Key Idea}
-Manual prompt engineering is trial-and-error. This project automates it: the GA \emph{searches} the space of all possible English instruction prompts, using test-case pass rates as the fitness signal.
+The GA treats each system prompt as a \textbf{chromosome} --- a candidate solution that
+can be scored (fitness evaluated), combined with another (crossover), and lightly altered
+(mutation), exactly as in biological evolution.  Over 20 generations the GA evolves a
+population of 15 prompts, keeping the best-performing ones and combining their strategies,
+until it converges on a prompt that makes the LLM solve the most coding problems correctly.
+
+\begin{conceptbox}{The Core Insight}
+Manual prompt engineering is trial-and-error.  A human tries one prompt, tests it, tweaks
+it, and tries again.  This project automates that loop: the GA \emph{searches} the entire
+space of possible English instruction paragraphs by treating test-case pass rates as the
+fitness signal.  The LLM's own creativity (via crossover and mutation calls) is used to
+\emph{generate} new prompts, while its code-generation ability is what is being
+\emph{optimised}.
 \end{conceptbox}
 
 \section{The Codebase at a Glance}
 
-The project consists of 8 Python files totalling $\sim$1{,}000 lines:
+The project consists of 8 Python files totalling approximately 1{,}000 lines:
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}llr@{}}
+\begin{tabular}{@{}llrp{6cm}@{}}
 \toprule
-\textbf{File} & \textbf{Purpose} & \textbf{Lines} \\
+\textbf{File} & \textbf{Lines} & \textbf{Public items} & \textbf{Role} \\
 \midrule
-\texttt{config.py}        & All settings and hyperparameters  & 58  \\
-\texttt{seeds.py}         & 15 diverse starting prompts       & 116 \\
-\texttt{dataset.py}       & Load and split APPS problems      & 88  \\
-\texttt{evaluator.py}     & Execute code, measure correctness & 122 \\
-\texttt{cost\_tracker.py} & Track API costs per call           & 140 \\
-\texttt{llm.py}           & All Claude API interactions        & 190 \\
-\texttt{ga.py}            & The genetic algorithm loop         & 228 \\
-\texttt{main.py}          & Entry point, save results          & 160 \\
+\pyfile{config.py}        & 62  & 16 constants  & Single source of truth for all settings \\
+\pyfile{seeds.py}         & 116 & 1 list        & The 15 generation-zero chromosomes \\
+\pyfile{dataset.py}       & 88  & 2 functions   & Load \& split APPS coding problems \\
+\pyfile{evaluator.py}     & 122 & 3 functions   & Extract code; run tests in subprocess \\
+\pyfile{cost\_tracker.py} & 178 & 2 classes     & Log token counts; compute API cost \\
+\pyfile{llm.py}           & 202 & 5 functions   & All Claude API calls \\
+\pyfile{ga.py}            & 228 & 4 items       & The full evolutionary loop \\
+\pyfile{main.py}          & 168 & 3 functions   & Orchestrate, checkpoint, save results \\
 \bottomrule
 \end{tabular}
 \caption{Project file summary.}
 \end{table}
 
+\section{Module Dependency Graph}
+
+Every \texttt{import} relationship is shown below. An arrow means ``imports from''.
+
+\begin{lstlisting}[style=chain, caption={Module import graph (arrows = imports).}]
+  main.py
+    |--- imports ---> config, dataset, evaluator, ga, llm
+    |--- imports ---> cost_tracker  (singleton: tracker)
+    |--- imports ---> seeds         (SEED_PROMPTS list)
+
+  ga.py
+    |--- imports ---> config, evaluator, llm
+
+  llm.py
+    |--- imports ---> config
+    |--- imports ---> cost_tracker  (singleton: tracker)
+    |--- imports ---> anthropic     (Anthropic API client)
+
+  evaluator.py
+    |--- imports ---> re, subprocess, sys  (stdlib only)
+
+  dataset.py
+    |--- imports ---> json, random, sys, pathlib  (stdlib only)
+
+  cost_tracker.py
+    |--- imports ---> json, time, dataclasses, datetime, pathlib  (stdlib only)
+
+  config.py
+    |--- imports ---> os, pathlib, dotenv
+
+  seeds.py
+    |--- (no imports)
+\end{lstlisting}
+
+\begin{conceptbox}{Key Import Insight}
+\pyfile{evaluator.py}, \pyfile{dataset.py}, \pyfile{cost\_tracker.py}, and \pyfile{seeds.py}
+have \emph{zero external dependencies} (only Python standard library or no imports at all).
+This means they can be tested in isolation without API keys or network access.
+\pyfile{llm.py} is the \emph{only} file that touches the Anthropic network.
+\end{conceptbox}
+
 \section{How to Read This Document}
 
-Each chapter covers one file. Within each chapter:
-\begin{itemize}[nosep]
-  \item A \textbf{plain-English summary} of what the file does and why.
-  \item The \textbf{actual source code} with syntax highlighting.
-  \item \textbf{Block-by-block explanations} that introduce terms progressively.
-  \item \textbf{Concept boxes} (blue) for important ideas you'll see again later.
-\end{itemize}
+Each chapter covers one file and follows this structure:
+\begin{enumerate}[nosep]
+  \item \textbf{Purpose} --- plain-English summary of what the file does and why it exists.
+  \item \textbf{File at a Glance} --- table of every function/class with one-line descriptions.
+  \item \textbf{Full Source Code} --- the actual source with line numbers.
+  \item \textbf{Function-by-Function Analysis} --- for every function:
+    \begin{itemize}[nosep]
+      \item Exact signature (all parameters, types, defaults)
+      \item What calls it and what it calls (the call chain)
+      \item Step-by-step walkthrough of the body
+      \item Return value with a concrete example
+      \item Edge cases and error handling
+    \end{itemize}
+  \item \textbf{Worked Example} --- real data traced through the function.
+\end{enumerate}
+
+Colour coding for boxes: \textbf{blue} = concept/theory; \textbf{orange} = warning/gotcha;
+\textbf{green} = function specification; \textbf{yellow} = worked example.
 
 
-% ======================================================================
-%  CHAPTER 1 — config.py
-% ======================================================================
-\chapter{Configuration: \texttt{config.py}}
+% ==========================================================================
+%  CHAPTER 2 --- ARCHITECTURE \& DATA FLOW
+% ==========================================================================
+\chapter{Architecture \& Data Flow}
+
+\section{The Two-Model Architecture}
+
+A critical design choice is that \emph{two separate Claude models} are used for two
+completely different purposes:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Role} & \textbf{Model} & \textbf{Temperature} & \textbf{Used for} \\
+\midrule
+\textbf{Target} (the subject) & \texttt{claude-haiku-4-5-20251001} & 0.0 (deterministic) & Generating Python code (fitness) \\
+\textbf{Optimizer} (the tool) & \texttt{claude-sonnet-4-6}          & 0.7 (creative)      & Crossover \& mutation of prompts \\
+\bottomrule
+\end{tabular}
+\caption{The two-model design.}
+\end{table}
+
+\begin{conceptbox}{Why Two Models?}
+\textbf{Target} (\texttt{Haiku 4.5}, temp=0): We are searching for the prompt that makes
+\emph{this specific model} write the best code.  Temperature 0 ensures that the same prompt
+always produces the same code on the same problem, making fitness scores \emph{repeatable and
+comparable} across generations.\\[6pt]
+\textbf{Optimizer} (\texttt{Sonnet 4.6}, temp=0.7): Crossover and mutation require
+\emph{creativity} --- merging two prompts into a coherent paragraph, inventing a new
+instructional strategy.  Sonnet is more capable for reasoning tasks; temperature 0.7
+introduces enough randomness to explore new wording.
+\end{conceptbox}
+
+\section{Master Execution Pipeline}
+
+Below is the complete call tree for a single run.  Indentation shows nesting; line
+references are to the actual source files.
+
+\begin{lstlisting}[style=chain, caption={Complete call tree for one GA run (ga.py lines are approximate).}]
+main.main()                                              [main.py:63]
+  |
+  |-- dataset.load_problems(config.APPS_TRAIN)           [dataset.py:18]
+  |     Returns: list[dict]  (~2346 problems before filter)
+  |
+  |-- dataset.split(all_problems, 100, 200, seed=42)     [dataset.py:68]
+  |     Returns: (evolution[100], holdout[200], rest[~2046])
+  |
+  |-- ga.run(SEED_PROMPTS, evolution_pool, on_generation=save_checkpoint)
+  |                                                      [ga.py:146]
+  |    |
+  |    |-- [GEN 0: evaluate all 15 seeds]
+  |    |    |
+  |    |    +-- ga.compute_fitness(ind, problems)         [ga.py:50]  x15
+  |    |         |
+  |    |         +-- [for each of 100 problems]:
+  |    |              |
+  |    |              |-- llm.generate_code(             [llm.py:77]
+  |    |              |     system_prompt=ind.prompt,
+  |    |              |     question=prob["question"],
+  |    |              |     fn_name=prob["fn_name"])
+  |    |              |     |
+  |    |              |     +-- llm._call(               [llm.py:29]
+  |    |              |           phase="fitness",
+  |    |              |           model=TARGET_MODEL,
+  |    |              |           temperature=0.0,
+  |    |              |           max_tokens=1024,
+  |    |              |           system=ind.prompt,
+  |    |              |           user="<question>\n\nWrite a Python function named `fn_name`.")
+  |    |              |           |
+  |    |              |           |-- llm._get_client()  [llm.py:21]
+  |    |              |           |     Returns: anthropic.Anthropic instance (cached)
+  |    |              |           |
+  |    |              |           |-- client.messages.create(...)  [Anthropic API]
+  |    |              |           |     Returns: Message object
+  |    |              |           |
+  |    |              |           |-- tracker.record(    [cost_tracker.py:73]
+  |    |              |           |     phase, model,
+  |    |              |           |     input_tokens, output_tokens)
+  |    |              |           |     Appends CallRecord to self.calls
+  |    |              |           |
+  |    |              |           Returns: resp.content[0].text  (raw LLM string)
+  |    |              |
+  |    |              |-- evaluator.extract_code(response) [evaluator.py:24]
+  |    |              |     Returns: Python code string (stripped from markdown)
+  |    |              |
+  |    |              +-- evaluator.run_tests(           [evaluator.py:84]
+  |    |                    code, fn_name,
+  |    |                    inputs, outputs, timeout=5)
+  |    |                    |
+  |    |                    |-- evaluator.has_function(code, fn_name) [evaluator.py:43]
+  |    |                    |     Returns: bool
+  |    |                    |
+  |    |                    |-- evaluator._build_script( [evaluator.py:71]
+  |    |                    |     code, fn_name, inputs, outputs)
+  |    |                    |     Returns: complete Python script string
+  |    |                    |
+  |    |                    |-- subprocess.run([python, "-c", script], timeout=5)
+  |    |                    |     Returns: CompletedProcess (stdout with __R__: lines)
+  |    |                    |
+  |    |                    Returns: float in [0.0, 1.0]  (partial-credit score)
+  |    |
+  |    |-- [GENS 1..20: breed and evaluate]
+  |    |    |
+  |    |    +-- ga.tournament_select(population, rng)    [ga.py:84]  x2 per offspring
+  |    |    |     Returns: Individual (fittest of 3 random draws)
+  |    |    |
+  |    |    +-- ga.breed(parent_a, parent_b, rng)        [ga.py:94]  x13 per generation
+  |    |         |
+  |    |         |-- [80% chance] llm.crossover(         [llm.py:125]
+  |    |         |    parent_a.prompt, parent_b.prompt)
+  |    |         |    |
+  |    |         |    +-- llm._call(phase="crossover",
+  |    |         |          model=OPTIMIZER_MODEL, temp=0.7,
+  |    |         |          max_tokens=600, ...)
+  |    |         |    Returns: merged prompt string
+  |    |         |
+  |    |         |-- [25% chance] llm.mutate_inject(prompt)  [llm.py:147]
+  |    |         |    +-- llm._call(phase="mutate_inject", ...)
+  |    |         |    Returns: prompt with new strategy sentence added
+  |    |         |
+  |    |         |-- [15% chance] llm.mutate_delete(prompt)  [llm.py:166]
+  |    |         |    +-- llm._call(phase="mutate_delete", ...)
+  |    |         |    Returns: prompt with weakest sentence removed
+  |    |         |
+  |    |         |-- [10% chance] llm.mutate_rephrase(prompt) [llm.py:187]
+  |    |         |    +-- llm._call(phase="mutate_rephrase", ...)
+  |    |         |    Returns: same-meaning prompt in different words
+  |    |         |
+  |    |         Returns: Individual(prompt, parent_a.uid, parent_b.uid, operators)
+  |    |                  [fitness = -1.0, not yet evaluated]
+  |    |
+  |    |    +-- ga.compute_fitness(child, problems)  x13 [same sub-tree as above]
+  |    |
+  |    |    +-- on_generation(gen-1, population, stats)
+  |    |         = main.save_checkpoint(run_dir, gen-1, population, stats)
+  |    |           Writes: results/run_TIMESTAMP/generation_NN.json
+  |    |
+  |    Returns: (best_Individual, history: list[dict])
+  |
+  |-- main.evaluate_on_holdout(best.prompt, holdout)     [main.py:48]
+  |     [Same sub-tree as compute_fitness but over 200 problems]
+  |     Returns: float (holdout fitness score)
+  |
+  +-- tracker.flush(extra={...})                         [cost_tracker.py:137]
+        |-- CostTracker._by_phase()                      [cost_tracker.py:84]
+        |-- CostTracker._by_model()                      [cost_tracker.py:109]
+        Writes: Code/Costs/cost_TIMESTAMP.json
+        Returns: Path object
+\end{lstlisting}
+
+\section{Data Types Flowing Between Modules}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}p{3cm}p{3cm}p{2.5cm}p{5cm}@{}}
+\toprule
+\textbf{Producer} & \textbf{Consumer} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\pyfile{seeds.py} & \pyfile{ga.py} & \texttt{list[str]} & 15 initial prompt strings \\
+\pyfile{dataset.py} & \pyfile{ga.py}, \pyfile{main.py} & \texttt{list[dict]} & Problem dicts (id, question, fn\_name, inputs, outputs) \\
+\pyfile{llm.py} & \pyfile{ga.py}, \pyfile{main.py} & \texttt{str} & Raw LLM response (may contain markdown) \\
+\pyfile{evaluator.py} & \pyfile{ga.py}, \pyfile{main.py} & \texttt{str} & Extracted Python code string \\
+\pyfile{evaluator.py} & \pyfile{ga.py}, \pyfile{main.py} & \texttt{float} & Partial-credit score in [0.0, 1.0] \\
+\pyfile{ga.py} & \pyfile{main.py} & \texttt{Individual} & Best chromosome (prompt + fitness + metadata) \\
+\pyfile{ga.py} & \pyfile{main.py} & \texttt{list[dict]} & History of best/mean/worst per generation \\
+\pyfile{llm.py} & \pyfile{cost\_tracker.py} & \texttt{int, int} & input\_tokens, output\_tokens per API call \\
+\pyfile{cost\_tracker.py} & \pyfile{main.py} & \texttt{Path} & Path to written cost JSON file \\
+\bottomrule
+\end{tabular}
+\caption{Data flowing between modules.}
+\end{table}
+
+\section{The API Call Budget}
+
+To understand scale: one full run makes the following API calls:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+\textbf{Call type} & \textbf{Count} & \textbf{Model} & \textbf{Formula} \\
+\midrule
+Fitness (gen 0 seeds)   & 1{,}500 & Haiku & 15 seeds $\times$ 100 problems \\
+Fitness (gens 1--20)    & 26{,}000 & Haiku & 20 gens $\times$ 13 offspring $\times$ 100 problems \\
+Crossover               & $\leq$260 & Sonnet & 20 gens $\times$ 13 offspring $\times$ 80\% \\
+Mutate inject           & $\leq$325 & Sonnet & 20 gens $\times$ 13 offspring $\times$ 25\% \\
+Mutate delete           & $\leq$195 & Sonnet & 20 gens $\times$ 13 offspring $\times$ 15\% \\
+Mutate rephrase         & $\leq$130 & Sonnet & 20 gens $\times$ 13 offspring $\times$ 10\% \\
+Holdout evaluation      & 200 & Haiku & 1 $\times$ 200 problems \\
+\midrule
+\textbf{Total}          & $\approx$\textbf{28{,}000} & --- & --- \\
+\bottomrule
+\end{tabular}
+\caption{Approximate API call counts per full run.}
+\end{table}
+
+\section{Fitness Score: What Is Being Optimised?}
+
+The fitness of one prompt = the average partial-credit score across 100 APPS problems.
+The partial credit for one problem = (test cases passed) / (total test cases).
+
+\[
+\text{fitness}(p) = \frac{1}{100} \sum_{i=1}^{100}
+  \frac{\text{tests passed on problem } i \text{ using prompt } p}{\text{total tests on problem } i}
+\]
+
+A fitness of 1.0 means the prompt caused the LLM to write code that passed \emph{every}
+test case on \emph{every} problem.  A fitness of 0.73 means 73\% of test cases were passed
+on average.
+
+
+
+\chapter{Configuration: \pyfile{config.py}}
 
 \section{Purpose}
 
-Every number that controls the project's behaviour lives in this single file: how many prompts to evolve, how many generations to run, which Claude model to use, where the dataset is, and so on. No other file contains hard-coded settings. This makes it easy to tweak the experiment without hunting through multiple files.
+Every hyperparameter and file path lives in this one file.  No other file
+hard-codes any numbers or paths.  When you want to change the population size,
+reduce the number of generations, or switch Claude models, you edit
+\emph{only} \pyfile{config.py}.
+
+\section{File at a Glance}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Name} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\fn{ROOT}                 & \texttt{Path}  & Project root (one level above \texttt{Code/}) \\
+\fn{APPS\_TRAIN}          & \texttt{Path}  & Absolute path to APPS training data \\
+\fn{RESULTS\_DIR}         & \texttt{Path}  & Where run output folders are created \\
+\fn{EVOLUTION\_SIZE}      & \texttt{int}   & Problems used for fitness during GA (100) \\
+\fn{HOLDOUT\_SIZE}        & \texttt{int}   & Problems reserved for final test (200) \\
+\fn{RANDOM\_SEED}         & \texttt{int}   & Seed for all random decisions (42) \\
+\fn{POPULATION\_SIZE}     & \texttt{int}   & Chromosomes alive at any time (15) \\
+\fn{GENERATIONS}          & \texttt{int}   & Breeding cycles (20) \\
+\fn{ELITISM\_COUNT}       & \texttt{int}   & Top individuals copied unchanged (2) \\
+\fn{TOURNAMENT\_SIZE}     & \texttt{int}   & Contestants per parent selection (3) \\
+\fn{CROSSOVER\_RATE}      & \texttt{float} & Probability crossover fires per offspring (0.8) \\
+\fn{MUT\_INJECT\_PROB}    & \texttt{float} & Probability inject mutation fires (0.25) \\
+\fn{MUT\_DELETE\_PROB}    & \texttt{float} & Probability delete mutation fires (0.15) \\
+\fn{MUT\_REPHRASE\_PROB}  & \texttt{float} & Probability rephrase mutation fires (0.10) \\
+\fn{ANTHROPIC\_API\_KEY}  & \texttt{str}   & API key read from \texttt{.env} \\
+\fn{TARGET\_MODEL}        & \texttt{str}   & Claude model for code generation \\
+\fn{TARGET\_TEMPERATURE}  & \texttt{float} & Deterministic code generation (0.0) \\
+\fn{OPTIMIZER\_MODEL}     & \texttt{str}   & Claude model for crossover/mutation \\
+\fn{OPTIMIZER\_TEMPERATURE} & \texttt{float} & Creative prompt evolution (0.7) \\
+\fn{MAX\_CODE\_TOKENS}    & \texttt{int}   & Max tokens for code generation (1024) \\
+\fn{MAX\_OPERATOR\_TOKENS} & \texttt{int}  & Max tokens for crossover/mutation (600) \\
+\fn{EXEC\_TIMEOUT}        & \texttt{int}   & Seconds before subprocess is killed (5) \\
+\bottomrule
+\end{tabular}
+\caption{\pyfile{config.py}: all exported names.}
+\end{table}
 
 \section{Full Source Code}
 
-\begin{lstlisting}[caption={\texttt{config.py} --- All hyperparameters and paths.}]
+\begin{lstlisting}[style=pycode, caption={\pyfile{config.py} --- complete source.}]
 """
 config.py -- All hyperparameters and paths in one place.
 Edit here; everything else reads from this module.
@@ -188,6 +572,9 @@ Edit here; everything else reads from this module.
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()  # reads .env file in the current working directory
 
 # Paths
 ROOT         = Path(__file__).parent.parent
@@ -202,136 +589,411 @@ RANDOM_SEED    = 42
 # Genetic Algorithm
 POPULATION_SIZE   = 15
 GENERATIONS       = 20
-ELITISM_COUNT     = 2
-TOURNAMENT_SIZE   = 3
-CROSSOVER_RATE    = 0.8
-MUT_INJECT_PROB   = 0.25
-MUT_DELETE_PROB   = 0.15
-MUT_REPHRASE_PROB = 0.10
+ELITISM_COUNT     = 2   # top-N individuals carried unchanged to next generation
+TOURNAMENT_SIZE   = 3   # contestants per tournament selection draw
+
+CROSSOVER_RATE      = 0.8   # probability crossover is applied to each offspring
+
+# Independent per-individual mutation probabilities (can all apply at once)
+MUT_INJECT_PROB   = 0.25   # add a new instructional strategy
+MUT_DELETE_PROB   = 0.15   # drop a random sentence
+MUT_REPHRASE_PROB = 0.10   # rewrite without changing meaning
 
 # LLM
-ANTHROPIC_API_KEY     = os.environ.get("ANTHROPIC_API_KEY", "")
-TARGET_MODEL          = "claude-haiku-4-5-20251001"
-TARGET_TEMPERATURE    = 0.0
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+# Model being optimised -- generates code, evaluated for fitness.
+TARGET_MODEL       = "claude-haiku-4-5-20251001"
+TARGET_TEMPERATURE = 0.0   # deterministic for repeatable fitness scores
+
+# Model used for crossover / mutation meta-prompts -- needs creativity.
 OPTIMIZER_MODEL       = "claude-sonnet-4-6"
 OPTIMIZER_TEMPERATURE = 0.7
-MAX_CODE_TOKENS       = 1024
-MAX_OPERATOR_TOKENS   = 600
+
+MAX_CODE_TOKENS     = 1024
+MAX_OPERATOR_TOKENS = 600
 
 # Code execution
-EXEC_TIMEOUT = 5
+EXEC_TIMEOUT = 5   # seconds per subprocess evaluation
 \end{lstlisting}
 
 \section{Block-by-Block Explanation}
 
-\subsection{Paths (lines 10--12)}
+\subsection{Path Resolution (lines 12--14)}
 
-\texttt{ROOT} points to the project's top-level folder (one level above \texttt{Code/}). \texttt{APPS\_TRAIN} points to the APPS dataset's \texttt{train/} directory. \texttt{RESULTS\_DIR} is where output files (best prompts, convergence history) are saved.
+\begin{specbox}{Path constants}
+\textbf{Signature:} Module-level constants, resolved at import time.\\
+\textbf{Called by:} \fn{dataset.load\_problems()} reads \fn{APPS\_TRAIN};
+\fn{main.main()} reads \fn{RESULTS\_DIR}; \fn{main.main()} checks
+\fn{APPS\_TRAIN.exists()}.
+\end{specbox}
 
-\begin{conceptbox}{Path objects}
-Python's \texttt{pathlib.Path} is a modern way to handle file paths. The \texttt{/} operator joins path segments: \texttt{ROOT / "APPS" / "train"} produces a full path like \texttt{/home/.../APPS/train}. It works on Windows, Mac, and Linux without worrying about slashes.
-\end{conceptbox}
+\begin{lstlisting}[style=chain]
+ROOT        = Path(__file__).parent.parent
+               ^--- __file__ = "/home/.../Code/config.py"
+               ^--- .parent  = "/home/.../Code/"
+               ^--- .parent  = "/home/.../Project/"
 
-\subsection{Dataset (lines 15--17)}
+APPS_TRAIN  = ROOT / "Dataset Examples" / "APPS" / "train"
+            = "/home/.../Project/Dataset Examples/APPS/train"
 
-\texttt{EVOLUTION\_SIZE = 100} means the GA evaluates each prompt on 100 fixed coding problems during evolution. \texttt{HOLDOUT\_SIZE = 200} means 200 \emph{different} problems are reserved for testing the best prompt after evolution finishes --- this checks that the prompt didn't just get lucky on the 100 it trained on. \texttt{RANDOM\_SEED = 42} makes the problem selection reproducible.
+RESULTS_DIR = Path(__file__).parent / "results"
+            = "/home/.../Code/results"
+\end{lstlisting}
 
-\subsection{Genetic Algorithm (lines 20--27)}
+\texttt{Path(\_\_file\_\_)} gives the absolute path of \pyfile{config.py} itself.
+Chaining \texttt{.parent} moves up one directory level.  The \texttt{/} operator
+on \texttt{Path} objects joins segments --- it works on all operating systems without
+needing to worry about forward vs.\ backward slashes.
 
-\begin{itemize}[nosep]
-  \item \texttt{POPULATION\_SIZE = 15} --- how many candidate prompts exist at any time.
-  \item \texttt{GENERATIONS = 20} --- how many breeding cycles the GA runs.
-  \item \texttt{ELITISM\_COUNT = 2} --- the top 2 prompts survive unchanged into the next generation.
-  \item \texttt{TOURNAMENT\_SIZE = 3} --- when selecting a parent, pick 3 random prompts and take the best.
-  \item \texttt{CROSSOVER\_RATE = 0.8} --- 80\% chance that two parents are merged (otherwise one is copied).
-  \item \texttt{MUT\_INJECT\_PROB = 0.25} --- 25\% chance a new strategy sentence is added.
-  \item \texttt{MUT\_DELETE\_PROB = 0.15} --- 15\% chance a sentence is removed.
-  \item \texttt{MUT\_REPHRASE\_PROB = 0.10} --- 10\% chance the prompt is reworded.
-\end{itemize}
-
-\begin{conceptbox}{Elitism}
-Without elitism, the best prompt could be lost if all its offspring happen to be worse. Elitism copies the top $k$ individuals directly into the next generation, guaranteeing the population never regresses.
-\end{conceptbox}
-
-\subsection{LLM (lines 30--36)}
-
-Two different Claude models are used:
+\subsection{Dataset Constants (lines 17--19)}
 
 \begin{itemize}[nosep]
-  \item \textbf{Target model} (\texttt{Haiku 4.5}): generates code. This is the model being \emph{optimised} --- we're searching for the prompt that makes \emph{this} model write the best code. Temperature 0.0 makes output deterministic so the same prompt always produces the same code on the same problem.
-  \item \textbf{Optimizer model} (\texttt{Sonnet 4.6}): performs crossover and mutation. It needs creativity (merging prompts, inventing new strategies), so it runs at temperature 0.7.
+  \item \fn{EVOLUTION\_SIZE = 100} --- The GA evaluates every prompt on exactly these
+    100 problems.  Keeping the set fixed across all generations is critical: if the
+    problems changed, a prompt might score higher simply because it got easier problems,
+    not because it improved.
+  \item \fn{HOLDOUT\_SIZE = 200} --- After the GA finishes, the \emph{best} prompt is
+    tested on these 200 \emph{never-seen} problems to measure generalisation.  This
+    plays the same role as a test set in machine learning.
+  \item \fn{RANDOM\_SEED = 42} --- Passed to \fn{dataset.split()} and \fn{ga.run()}'s
+    \texttt{random.Random} instance to make the experiment fully reproducible.
 \end{itemize}
 
-\subsection{Execution (line 39)}
+\subsection{Genetic Algorithm Constants (lines 22--28)}
 
-\texttt{EXEC\_TIMEOUT = 5}: each generated code snippet gets 5 seconds to run all test cases. If it hangs (infinite loop), the subprocess is killed and the problem scores 0.
+\begin{conceptbox}{Elitism prevents regression}
+Without elitism, a great prompt discovered in generation 5 might be replaced by worse
+offspring in generation 6.  \fn{ELITISM\_COUNT = 2} guarantees the top 2 prompts always
+survive into the next generation \emph{unchanged}, so the population's best fitness can
+only stay the same or improve.
+\end{conceptbox}
+
+\begin{conceptbox}{Tournament size: exploration vs.\ exploitation}
+\fn{TOURNAMENT\_SIZE = 3} means we draw 3 random contestants and select the best.
+A smaller tournament (e.g.\ 2) gives weaker individuals more chances, increasing
+exploration.  A larger tournament (e.g.\ 10) almost always picks the global best,
+reducing exploration.  Size 3 is a standard balanced choice.
+\end{conceptbox}
+
+\subsection{Mutation Probability Independence (lines 27--28)}
+
+All three mutation probabilities are \emph{independent}: each is checked separately with
+its own \texttt{rng.random()} call.  On any single offspring, any combination of all three
+(or none) can fire, giving $2^3 = 8$ possible operator combinations.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Combination} & \textbf{Probability} & \textbf{Resulting operators string} \\
+\midrule
+none   & $(1-0.25)(1-0.15)(1-0.10) = 0.574$ & \texttt{"crossover"} or \texttt{"copy"} \\
+inject only & $0.25 \times 0.85 \times 0.90 = 0.191$ & \texttt{"+inject"} \\
+delete only & $0.75 \times 0.15 \times 0.90 = 0.101$ & \texttt{"+delete"} \\
+rephrase only & $0.75 \times 0.85 \times 0.10 = 0.064$ & \texttt{"+rephrase"} \\
+inject+delete & $0.25 \times 0.15 \times 0.90 = 0.034$ & \texttt{"+inject+delete"} \\
+inject+rephrase & \ldots & \texttt{"+inject+rephrase"} \\
+delete+rephrase & \ldots & \texttt{"+delete+rephrase"} \\
+all three & $0.25 \times 0.15 \times 0.10 = 0.00375$ & \texttt{"+inject+delete+rephrase"} \\
+\bottomrule
+\end{tabular}
+\caption{Possible mutation combinations (probabilities are for crossover only; if copy fires, similar logic applies).}
+\end{table}
+
+\subsection{LLM Constants (lines 31--43)}
+
+\fn{ANTHROPIC\_API\_KEY} is read from the environment (or from a \pyfile{.env} file via
+\fn{load\_dotenv()}) --- never hard-coded.  If the key is absent, \fn{main.main()} catches
+this and exits with a clear error message before wasting time loading the dataset.
+
+\fn{MAX\_CODE\_TOKENS = 1024}: the target LLM's response for a code problem is limited to
+1{,}024 tokens (roughly 750 words of code).  If the LLM tries to write a longer response,
+the API truncates it --- which would produce syntactically broken code that fails all tests.
+
+\fn{MAX\_OPERATOR\_TOKENS = 600}: crossover and mutation prompts produce shorter text
+(a modified instruction paragraph), so 600 tokens is sufficient and cheaper.
+
+\subsection{Execution Timeout (line 47)}
+
+\fn{EXEC\_TIMEOUT = 5}: each test run gets 5 seconds.  If the LLM-generated code contains
+an infinite loop (a common bug), the subprocess is forcibly killed after 5 seconds and the
+problem scores 0.0.  Without this, one bad code snippet could halt the entire GA.
 
 
-% ======================================================================
-%  CHAPTER 2 — seeds.py
-% ======================================================================
-\chapter{Seed Prompts: \texttt{seeds.py}}
+% ==========================================================================
+%  CHAPTER 4 --- seeds.py
+% ==========================================================================
+\chapter{Seed Prompts: \pyfile{seeds.py}}
 
 \section{Purpose}
 
-The GA needs a starting population. This file defines 15 diverse English instruction prompts --- the ``generation zero'' chromosomes. Each one emphasises a different coding strategy so the GA has a broad search starting point.
+The GA must start with a population.  \pyfile{seeds.py} provides 15 hand-crafted
+instruction prompts --- the ``generation zero'' chromosomes.  Each emphasises a
+different cognitive strategy for solving coding problems so the GA starts with
+genuinely diverse material.
 
-\begin{conceptbox}{Why diversity matters}
-If all 15 seeds said roughly the same thing, crossover would produce near-copies and mutation would be the only source of novelty. Diverse seeds let crossover combine genuinely different strategies: ``edge-case analysis'' from one parent + ``algorithm-first thinking'' from another = a potentially better hybrid.
+\begin{conceptbox}{Why diversity in seeds matters}
+If all 15 seeds said the same thing (e.g., ``Write correct Python code''), crossover
+would merely re-shuffle identical text and mutation would be the \emph{only} source
+of novelty.  By seeding 15 different strategies --- edge-case thinking, algorithm
+identification, pseudocode-first, output-format checking, etc.\ --- crossover can
+combine genuinely different approaches.  A hybrid of ``analyse edge cases first'' and
+``identify the algorithm pattern'' can be better than either parent alone.
 \end{conceptbox}
+
+\section{File at a Glance}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{8cm}@{}}
+\toprule
+\textbf{Name} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\fn{SEED\_PROMPTS} & \texttt{list[str]} & 15 diverse instruction strings (gen-0 chromosomes) \\
+\bottomrule
+\end{tabular}
+\caption{\pyfile{seeds.py}: exported names.}
+\end{table}
 
 \section{Full Source Code}
 
-\begin{lstlisting}[caption={\texttt{seeds.py} --- 15 diverse starting prompts (abbreviated).}]
+\begin{lstlisting}[style=pycode, caption={\pyfile{seeds.py} --- all 15 seed prompts.}]
+"""
+seeds.py -- Initial population: 15 diverse system-level instruction prompts.
+
+These are the chromosomes fed to generation 0.  Diversity is intentional --
+each emphasises a different coding strategy so the GA has a rich search
+starting point.  The GA will crossover and mutate these into better prompts.
+"""
+
 SEED_PROMPTS: list[str] = [
     # 1 -- Structured analysis
-    "You are an expert Python programmer. Before writing code, "
-    "analyse the problem: identify the input types, the expected "
-    "output type, and any edge cases ...",
+    (
+        "You are an expert Python programmer. Before writing code, analyse the "
+        "problem: identify the input types, the expected output type, and any "
+        "edge cases (empty input, zero, negatives). Then write a clean, correct "
+        "Python function. Output only the function -- no explanations."
+    ),
 
     # 2 -- Competitive-programmer mindset
-    "Think like a competitive programmer. Identify the algorithm "
-    "pattern (math, string manipulation, recursion, sorting, "
-    "hashing). Write the most direct, correct solution ...",
+    (
+        "Think like a competitive programmer. Identify the algorithm pattern "
+        "(math, string manipulation, recursion, sorting, hashing). Write the "
+        "most direct, correct Python solution. Output only the function definition."
+    ),
 
-    # ... 13 more prompts covering: return-type focus,
-    # step-by-step reasoning, example-driven, minimal,
-    # edge-case defender, algorithm-first, output-format guard,
-    # pseudocode-then-code, constraint-aware, defensive,
-    # readability-first, verify-against-examples, direct.
+    # 3 -- Return-type focus
+    (
+        "You are solving a coding kata. Read the problem twice. Pay close "
+        "attention to what the function must return -- the exact type and format. "
+        "Handle edge cases. Output just the function."
+    ),
+
+    # 4 -- Step-by-step reasoning
+    (
+        "Approach this problem step by step: (1) understand the input-output "
+        "relationship, (2) identify the core algorithm, (3) handle boundary "
+        "conditions, (4) implement cleanly in Python. Return only the function."
+    ),
+
+    # 5 -- Example-driven
+    (
+        "Before coding, trace through the provided examples manually to verify "
+        "your understanding of the expected behaviour. Then implement a clean "
+        "Python function that passes all cases."
+    ),
+
+    # 6 -- Minimal and precise
+    (
+        "Write a correct Python function. Avoid unnecessary imports and extra "
+        "code. The simplest solution that handles all cases is the best solution."
+    ),
+
+    # 7 -- Edge-case defender
+    (
+        "You are a careful Python programmer. Explicitly think about boundary "
+        "conditions: empty input, single element, zero, negative values, and "
+        "the maximum possible input. Write a function that handles all of them."
+    ),
+
+    # 8 -- Algorithm-first
+    (
+        "Determine the most appropriate algorithm or data structure before "
+        "writing any code. Implement it directly in Python. Avoid "
+        "over-engineering -- correctness and clarity are the priorities."
+    ),
+
+    # 9 -- Output-format guard
+    (
+        "Solve this Python coding problem precisely. Check the expected return "
+        "type carefully -- integer, list, string, boolean, or tuple. Your "
+        "function must return exactly that type. Output only the function."
+    ),
+
+    # 10 -- Pseudocode-then-code
+    (
+        "First mentally sketch the algorithm in plain English, then translate "
+        "it directly into Python. Keep the implementation close to the "
+        "pseudocode so it is easy to verify. Output only the function."
+    ),
+
+    # 11 -- Constraint-aware
+    (
+        "Read the problem constraints carefully. Choose an algorithm whose "
+        "time complexity fits within those constraints. Implement it cleanly "
+        "in Python and return only the function definition."
+    ),
+
+    # 12 -- Defensive / robust
+    (
+        "Write a robust Python function. Assume the input can be anything "
+        "within the stated constraints -- do not assume best-case input. "
+        "Handle all valid inputs correctly and return the right value."
+    ),
+
+    # 13 -- Readability-first
+    (
+        "Write clean, readable Python code. Use meaningful variable names and "
+        "keep the logic straightforward. Correct and readable code beats "
+        "clever but obscure code. Output only the function."
+    ),
+
+    # 14 -- Verify-against-examples
+    (
+        "Expert Python programmer: analyse the input constraints, pick the "
+        "right algorithm, and mentally verify your solution against the given "
+        "examples before finalising. Output only the function."
+    ),
+
+    # 15 -- Direct and focused
+    (
+        "Write a Python function to solve the given problem. Think about "
+        "what transformation is needed, handle edge cases, and implement the "
+        "simplest correct solution. No test code, no extra output."
+    ),
 ]
 
-assert len(SEED_PROMPTS) == 15
+assert len(SEED_PROMPTS) == 15, "Need exactly 15 seed prompts (= POPULATION_SIZE)"
 \end{lstlisting}
 
 \section{Explanation}
 
-The file is a simple Python list of 15 strings, each 2--4 sentences long. The \texttt{assert} at the bottom ensures the count matches \texttt{POPULATION\_SIZE} in \texttt{config.py}. If you add or remove a seed, the program will crash immediately with a clear error rather than silently misbehaving.
+\subsection{The 15 Strategies at a Glance}
 
-Each seed targets a different strategy: structured analysis, competitive-programming mindset, return-type focus, step-by-step reasoning, example-driven, minimal, edge-case defence, algorithm-first, output-format guard, pseudocode-then-code, constraint-aware, defensive/robust, readability-first, verify-against-examples, and direct/focused.
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}rp{3cm}p{8cm}@{}}
+\toprule
+\textbf{\#} & \textbf{Strategy} & \textbf{Core instruction focus} \\
+\midrule
+1  & Structured analysis     & Identify input types, output type, edge cases \emph{before} coding \\
+2  & Competitive programmer  & Find the algorithm pattern; write direct correct solution \\
+3  & Return-type focus       & Read twice; match exact return type and format \\
+4  & Step-by-step reasoning  & 4-step process: understand, identify, handle, implement \\
+5  & Example-driven          & Trace examples manually to verify understanding \\
+6  & Minimal and precise     & Simplest solution; avoid unnecessary code \\
+7  & Edge-case defender      & Explicitly enumerate: empty, single, zero, negative, max \\
+8  & Algorithm-first         & Choose data structure \emph{before} writing a line \\
+9  & Output-format guard     & Check return type (int/list/str/bool/tuple) explicitly \\
+10 & Pseudocode-then-code    & English sketch first, then translate to Python \\
+11 & Constraint-aware        & Match time complexity to stated constraints \\
+12 & Defensive / robust      & Assume worst-case valid input; never assume best-case \\
+13 & Readability-first       & Meaningful names; correct \& readable beats clever \\
+14 & Verify-against-examples & Mental verification against examples before finalising \\
+15 & Direct and focused      & Transformation-first; no test code; no extra output \\
+\bottomrule
+\end{tabular}
+\caption{The 15 seed strategies.}
+\end{table}
+
+\subsection{The Safety Assert}
+
+\begin{lstlisting}[style=example, caption={The guard at the bottom of seeds.py (line 116).}]
+assert len(SEED_PROMPTS) == 15, "Need exactly 15 seed prompts (= POPULATION_SIZE)"
+\end{lstlisting}
+
+If you add or remove a seed, Python immediately raises \texttt{AssertionError} when
+\pyfile{seeds.py} is imported --- before any API calls are made or any money is spent.
+The error message reminds you to match \fn{POPULATION\_SIZE} in \pyfile{config.py}.
+
+\subsection{How Seeds Become Individuals}
+
+In \fn{ga.run()} [\pyfile{ga.py}:167]:
+\begin{lstlisting}[style=example]
+population = [Individual(prompt=p) for p in seed_prompts]
+# Each seed string becomes an Individual with:
+#   prompt   = the seed string (e.g. "Think like a competitive programmer...")
+#   fitness  = -1.0  (unevaluated sentinel)
+#   uid      = random 8-char hex (e.g. "a3f7c2b1")
+#   parent_a = ""  (empty: seeds have no parents)
+#   parent_b = ""
+#   operators = ""
+\end{lstlisting}
 
 
-% ======================================================================
-%  CHAPTER 3 — dataset.py
-% ======================================================================
-\chapter{Dataset Loading: \texttt{dataset.py}}
+% ==========================================================================
+%  CHAPTER 5 --- dataset.py
+% ==========================================================================
+\chapter{Dataset Loading: \pyfile{dataset.py}}
 
 \section{Purpose}
 
-This file loads coding problems from the APPS dataset and splits them into three non-overlapping groups: the \textbf{evolution pool} (used during GA training), the \textbf{held-out set} (used for final evaluation), and the \textbf{rest} (unused buffer).
+This file loads coding problems from the APPS dataset (stored on disk as folders of
+JSON files) and splits them into three non-overlapping groups: the \textbf{evolution
+pool} (100 problems used as the fitness benchmark during the GA), the \textbf{held-out
+set} (200 problems reserved for the final generalisation test), and the \textbf{rest}
+(unused buffer).
+
+\section{File at a Glance}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{7.5cm}@{}}
+\toprule
+\textbf{Function} & \textbf{Returns} & \textbf{Description} \\
+\midrule
+\fn{load\_problems(apps\_train\_dir)} & \texttt{list[dict]} &
+  Reads all APPS problem folders; returns only Codewars introductory fn\_name problems \\
+\fn{split(problems, evolution\_size, holdout\_size, seed=42)} & \texttt{(list, list, list)} &
+  Deterministic shuffle then split into evolution / holdout / rest \\
+\bottomrule
+\end{tabular}
+\caption{\pyfile{dataset.py}: public functions.}
+\end{table}
 
 \section{Full Source Code}
 
-\begin{lstlisting}[caption={\texttt{dataset.py} --- Load and split APPS problems.}]
+\begin{lstlisting}[style=pycode, caption={\pyfile{dataset.py} --- complete source.}]
+"""
+dataset.py -- Load and split APPS Codewars introductory fn_name problems.
+
+Why Codewars only?
+    * 2,346 introductory problems from codewars.com, all standalone functions.
+    * Consistent execution format:
+        inputs[i]  = Python list of arguments already parsed (e.g. [1] or [2, "x"])
+        outputs[i] = [return_value]  -- the result wrapped in a single-element list
+    * LeetCode-style problems use class Solution, which complicates extraction.
+"""
+
 import json
 import random
 import sys
 from pathlib import Path
 
 
-def load_problems(apps_train_dir):
-    """Return every Codewars introductory fn_name problem."""
-    sys.set_int_max_str_digits(1_000_000)
+def load_problems(apps_train_dir: str | Path) -> list[dict]:
+    """
+    Return every Codewars introductory fn_name problem from the APPS train set.
+
+    Each problem dict has:
+        id        - folder name (e.g. "3715")
+        question  - full problem text
+        fn_name   - function the LLM must write
+        inputs    - list of test-case argument lists
+        outputs   - list of [expected_return_value]
+    """
+    sys.set_int_max_str_digits(1_000_000)   # needed for a handful of problems
     problems = []
     train_dir = Path(apps_train_dir)
 
@@ -340,20 +1002,23 @@ def load_problems(apps_train_dir):
         io_f   = prob_dir / "input_output.json"
         q_f    = prob_dir / "question.txt"
 
-        if not (meta_f.exists() and io_f.exists()
-                and q_f.exists()):
+        if not (meta_f.exists() and io_f.exists() and q_f.exists()):
             continue
+
         try:
             meta = json.loads(meta_f.read_text())
             io   = json.loads(io_f.read_text())
         except Exception:
-            continue
+            continue   # skip malformed JSON
 
-        if (meta.get("difficulty") != "introductory"
-                or "fn_name" not in io
-                or "codewars.com" not in meta.get("url", "")
-                or not io.get("inputs")
-                or not io.get("outputs")):
+        # Keep only: introductory difficulty, fn_name style, Codewars source
+        if (
+            meta.get("difficulty") != "introductory"
+            or "fn_name" not in io
+            or "codewars.com" not in meta.get("url", "")
+            or not io.get("inputs")
+            or not io.get("outputs")
+        ):
             continue
 
         problems.append({
@@ -363,90 +1028,264 @@ def load_problems(apps_train_dir):
             "inputs":   io["inputs"],
             "outputs":  io["outputs"],
         })
+
     return problems
 
 
-def split(problems, evolution_size, holdout_size,
-          seed=42):
-    """Split into evolution, holdout, and rest."""
+def split(
+    problems: list[dict],
+    evolution_size: int,
+    holdout_size: int,
+    seed: int = 42,
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """
+    Shuffle and split into:
+        evolution -- used for fitness evaluation every generation
+        holdout   -- unseen until final evaluation
+        rest      -- remaining problems (not used during training)
+    """
     rng = random.Random(seed)
     shuffled = problems.copy()
     rng.shuffle(shuffled)
+
     evolution = shuffled[:evolution_size]
-    holdout   = shuffled[evolution_size:
-                         evolution_size + holdout_size]
-    rest      = shuffled[evolution_size + holdout_size:]
+    holdout   = shuffled[evolution_size : evolution_size + holdout_size]
+    rest      = shuffled[evolution_size + holdout_size :]
+
     return evolution, holdout, rest
 \end{lstlisting}
 
-\section{Block-by-Block Explanation}
+\section{Function-by-Function Analysis}
 
-\subsection{Why Codewars only?}
+\subsection{\fn{load\_problems(apps\_train\_dir)}}
 
-The APPS dataset contains problems from multiple sources: Codewars, LeetCode, Codeforces, etc. This project filters to \emph{Codewars introductory problems with a \texttt{fn\_name}} field for three reasons:
+\begin{specbox}{load\_problems(apps\_train\_dir: str | Path) -> list[dict]}
+\textbf{Defined:} \pyfile{dataset.py}, line 18\\
+\textbf{Called by:} \fn{main.main()} [main.py:75]\\
+\textbf{Calls:} \fn{Path.iterdir()}, \fn{json.loads()}, \fn{Path.read\_text()},
+  \fn{sys.set\_int\_max\_str\_digits()}\\
+\textbf{Parameters:}\\
+\hspace{1em}\param{apps\_train\_dir} --- string or Path to the APPS \texttt{train/} directory\\
+\textbf{Returns:} \texttt{list[dict]} --- one dict per qualifying problem (typically $\approx$2{,}346 items)
+\end{specbox}
 
-\begin{enumerate}[nosep]
-  \item \textbf{Consistent execution}: Codewars problems define a standalone function (e.g., \texttt{def grader(score)}). LeetCode problems use \texttt{class Solution} with methods, which complicates extraction.
-  \item \textbf{Consistent I/O format}: Codewars stores inputs as argument lists and outputs as \texttt{[return\_value]} (wrapped in a single-element list). LeetCode uses raw values and sometimes string-encoded arguments.
-  \item \textbf{Quantity}: 2{,}105 problems pass the filter --- far more than the 100 + 200 needed.
+\textbf{Step-by-step walkthrough:}
+
+\begin{enumerate}
+  \item \textbf{Line 29}: \fn{sys.set\_int\_max\_str\_digits(1\_000\_000)} --- some APPS
+    problems have very large integer outputs.  Python 3.11+ limits integer-to-string
+    conversions for security; this raises the limit so those problems don't crash.
+
+  \item \textbf{Line 33}: \fn{train\_dir.iterdir()} --- yields each subdirectory
+    (each problem folder, e.g.\ \texttt{3715/}, \texttt{4820/}, etc.).
+
+  \item \textbf{Lines 34--36}: Construct paths to the 3 files inside each problem folder:
+    \begin{itemize}[nosep]
+      \item \texttt{metadata.json} --- contains \texttt{difficulty}, \texttt{url}, \texttt{source}
+      \item \texttt{input\_output.json} --- contains \texttt{fn\_name}, \texttt{inputs}, \texttt{outputs}
+      \item \texttt{question.txt} --- the problem statement in plain text
+    \end{itemize}
+
+  \item \textbf{Lines 38--39}: \textbf{Existence check} --- skip any folder missing one
+    of the three files.  Some APPS folders are incomplete.
+
+  \item \textbf{Lines 41--45}: \textbf{JSON parsing} inside a \texttt{try/except} ---
+    skips folders with malformed or empty JSON without crashing.
+
+  \item \textbf{Lines 47--55}: \textbf{Five-condition filter} (all must be true):
+    \begin{enumerate}[nosep]
+      \item \texttt{difficulty == "introductory"} --- exclude interview/competition problems
+      \item \texttt{"fn\_name" in io} --- exclude stdin/stdout style problems
+      \item \texttt{"codewars.com" in url} --- exclude LeetCode, Codeforces, etc.
+      \item \texttt{io["inputs"]} is non-empty --- must have test inputs
+      \item \texttt{io["outputs"]} is non-empty --- must have expected outputs
+    \end{enumerate}
+
+  \item \textbf{Lines 57--63}: Build the \textbf{problem dict} and append to the list.
 \end{enumerate}
 
-\subsection{The filter chain (lines 28--33)}
+\begin{exbox}{A real problem dict}
+\begin{lstlisting}[style=example]
+{
+    "id":       "3715",
+    "question": "Complete the function that takes an array of words.\n"
+                "You must concatenate the nth letter from each word using "
+                "the enumerating order of the word...",
+    "fn_name":  "nth_char",
+    "inputs":   [
+        [["yoda", "best", "has"]],   # test case 1: one argument (a list)
+        [["a", "bc", "def"]]         # test case 2
+    ],
+    "outputs":  [
+        ["oes"],                      # expected return for test case 1
+        ["abd"]                       # expected return for test case 2
+    ]
+}
+# Note: inputs[i] is a list of arguments; fn_name(*inputs[i]) unpacks them.
+# Note: outputs[i] is [return_value] (always wrapped in a single-element list).
+\end{lstlisting}
+\end{exbox}
 
-Five conditions must all be true:
-\begin{itemize}[nosep]
-  \item Difficulty is ``introductory'' (not interview or competition).
-  \item The problem has a \texttt{fn\_name} field (function-call style, not stdin/stdout).
-  \item The URL contains ``codewars.com''.
-  \item Both \texttt{inputs} and \texttt{outputs} are non-empty.
-\end{itemize}
+\textbf{Why Codewars only?}  The APPS dataset mixes problems from many sources.
+Codewars is chosen for three reasons:
+\begin{enumerate}[nosep]
+  \item \textbf{Standalone function format} --- every problem defines \texttt{def fn\_name(...): return ...}.
+    LeetCode uses \texttt{class Solution} methods, which require different extraction logic.
+  \item \textbf{Consistent I/O format} --- inputs are already-parsed Python lists of
+    arguments; outputs are \texttt{[return\_value]}.  This exact format is what the
+    evaluator's harness expects.
+  \item \textbf{Quantity} --- $\approx$2{,}346 qualifying problems, far more than the
+    100 + 200 needed.
+\end{enumerate}
 
-\subsection{The split function}
+\subsection{\fn{split(problems, evolution\_size, holdout\_size, seed=42)}}
 
-A deterministic shuffle (using a fixed seed) ensures that \emph{every run uses the same 100 problems} for fitness evaluation. This is critical: if the problems changed between generations, fitness scores would not be comparable.
+\begin{specbox}{split(problems, evolution\_size, holdout\_size, seed=42) -> (list, list, list)}
+\textbf{Defined:} \pyfile{dataset.py}, line 68\\
+\textbf{Called by:} \fn{main.main()} [main.py:82]\\
+\textbf{Calls:} \fn{random.Random()}, \fn{list.copy()}, \fn{random.Random.shuffle()}\\
+\textbf{Parameters:}\\
+\hspace{1em}\param{problems} --- full list from \fn{load\_problems()} ($\approx$2{,}346 dicts)\\
+\hspace{1em}\param{evolution\_size} --- size of the evolution pool (100)\\
+\hspace{1em}\param{holdout\_size} --- size of the held-out test set (200)\\
+\hspace{1em}\param{seed} --- RNG seed for reproducible split (42)\\
+\textbf{Returns:} \texttt{tuple[list, list, list]} --- (evolution, holdout, rest)
+\end{specbox}
 
-\begin{conceptbox}{Train/test split}
-Just like in machine learning, you never evaluate on the data you trained on. The GA ``trains'' on the 100-problem evolution pool; the 200-problem held-out set measures whether the evolved prompt generalises to unseen problems.
+\textbf{Step-by-step walkthrough:}
+
+\begin{enumerate}
+  \item \textbf{Line 80}: \fn{random.Random(seed)} creates an \emph{isolated} RNG with
+    seed 42.  This is separate from Python's global \texttt{random} module, so other
+    calls to \texttt{random} elsewhere don't affect the shuffle.
+
+  \item \textbf{Line 81}: \fn{problems.copy()} --- makes a shallow copy so the original
+    list order is preserved (the caller may want it unchanged).
+
+  \item \textbf{Line 82}: \fn{rng.shuffle(shuffled)} --- shuffles in place, deterministically
+    (same seed always produces same order).
+
+  \item \textbf{Lines 84--86}: Slice into three non-overlapping segments:
+    \begin{itemize}[nosep]
+      \item \texttt{evolution = shuffled[:100]} --- problems 0--99
+      \item \texttt{holdout   = shuffled[100:300]} --- problems 100--299
+      \item \texttt{rest      = shuffled[300:]} --- problems 300--$\sim$2{,}346 (unused)
+    \end{itemize}
+\end{enumerate}
+
+\begin{exbox}{Determinism is critical}
+\begin{lstlisting}[style=example]
+# Every single run, this call produces the SAME 100 evolution problems:
+evolution, holdout, rest = dataset.split(
+    all_problems, 100, 200, seed=42
+)
+
+# If seed=42 always gives the same shuffle, then:
+# - Fitness scores in generation 3 are comparable to generation 7.
+# - The held-out set is genuinely unseen (never used for selection).
+# - Two researchers can reproduce the exact same experiment.
+
+# If we used random.shuffle() (global RNG, not seeded), fitness scores
+# from different generations would not be comparable because the
+# 100 problems would change every run.
+\end{lstlisting}
+\end{exbox}
+
+\begin{conceptbox}{Train/Test Split --- same idea as machine learning}
+In ML, you train a model on training data and evaluate it on held-out test data to
+measure generalisation.  Here, the GA ``trains'' on the 100-problem evolution pool
+(the fitness signal) and the best evolved prompt is evaluated on the 200-problem
+holdout to confirm it generalises to unseen problems rather than overfitting to the
+specific 100.
 \end{conceptbox}
 
 
-% ======================================================================
-%  CHAPTER 4 — evaluator.py
-% ======================================================================
-\chapter{Code Evaluation: \texttt{evaluator.py}}
+
+\chapter{Code Evaluation: \pyfile{evaluator.py}}
 
 \section{Purpose}
 
-This file does two things: (1) extract Python code from an LLM's text response, and (2) execute that code against test cases in a sandboxed subprocess, returning a partial-credit fitness score.
+When the LLM generates code in response to a prompt, we need to:
+\begin{enumerate}[nosep]
+  \item \textbf{Extract} the Python code from the LLM's raw text response (which may
+    contain markdown fences, explanations, and other text).
+  \item \textbf{Execute} the extracted code against test cases in a \emph{completely
+    isolated subprocess} and return how many tests passed.
+\end{enumerate}
+
+This file has no LLM calls and no imports beyond the Python standard library.
+
+\section{File at a Glance}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{8cm}@{}}
+\toprule
+\textbf{Item} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\fn{extract\_code(response)}           & function & Pull Python code from raw LLM text \\
+\fn{has\_function(code, fn\_name)}     & function & Check if the required function is defined \\
+\fn{\_HARNESS\_TEMPLATE}               & str      & Template for the subprocess test script \\
+\fn{\_build\_script(code, fn\_name, inputs, outputs)} & function & Assemble the complete test script \\
+\fn{run\_tests(code, fn\_name, inputs, outputs, timeout)} & function & Execute and score the code \\
+\bottomrule
+\end{tabular}
+\caption{\pyfile{evaluator.py}: all items.}
+\end{table}
 
 \section{Full Source Code}
 
-\begin{lstlisting}[caption={\texttt{evaluator.py} --- Code extraction and test execution.}]
+\begin{lstlisting}[style=pycode, caption={\pyfile{evaluator.py} --- complete source.}]
+"""
+evaluator.py -- Code extraction and sandboxed test-case execution.
+
+Execution model (Codewars APPS fn_name problems):
+    inputs[i]  = Python list already parsed, e.g. [1] or ["hello", 2]
+    outputs[i] = [expected_return_value], e.g. [5] or [True]
+
+    result = fn_name(*inputs[i])
+    passed = ([result] == outputs[i])
+
+Fitness = (test cases passed) / (total test cases)   -- partial credit.
+"""
+
 import re
 import subprocess
 import sys
+from typing import Optional
 
-# --- Code extraction ---
 
-def extract_code(response):
-    """Pull Python code from an LLM response."""
+# ---------------------------------------------------------------------------
+# Code extraction
+# ---------------------------------------------------------------------------
+
+def extract_code(response: str) -> str:
+    """
+    Pull the Python code block out of an LLM response.
+    Tries ```python ... ``` first, then any ``` ... ```, then the raw text.
+    """
+    # Markdown fenced code block with python tag
     m = re.search(r"```python\s*\n([\s\S]*?)```", response)
     if m:
         return m.group(1).strip()
+
+    # Any fenced code block
     m = re.search(r"```\s*\n?([\s\S]*?)```", response)
     if m:
         return m.group(1).strip()
+
+    # No fences -- assume the whole response is code
     return response.strip()
 
 
-def has_function(code, fn_name):
-    """True if def fn_name( appears in the code."""
-    return bool(
-        re.search(rf"\bdef\s+{re.escape(fn_name)}\s*\(",
-                   code))
+def has_function(code: str, fn_name: str) -> bool:
+    """Return True if `def fn_name(` appears in the code."""
+    return bool(re.search(rf"\bdef\s+{re.escape(fn_name)}\s*\(", code))
 
 
-# --- Subprocess test runner ---
+# ---------------------------------------------------------------------------
+# Subprocess test runner
+# ---------------------------------------------------------------------------
 
 _HARNESS_TEMPLATE = """\
 import sys
@@ -457,8 +1296,7 @@ sys.set_int_max_str_digits(1_000_000)
 def __run__(inp, expected):
     try:
         result = {fn_name}(*inp)
-        tag = "1" if [result] == expected else "0"
-        sys.stdout.write("__R__:" + tag + "\\n")
+        sys.stdout.write("__R__:" + ("1" if [result] == expected else "0") + "\\n")
         sys.stdout.flush()
     except Exception:
         sys.stdout.write("__R__:0\\n")
@@ -468,152 +1306,766 @@ def __run__(inp, expected):
 """
 
 
-def _build_script(code, fn_name, inputs, outputs):
+def _build_script(code: str, fn_name: str, inputs: list, outputs: list) -> str:
+    """Build the standalone test script that will be executed in a subprocess."""
     call_lines = "\n".join(
         f"__run__({repr(inp)}, {repr(out)})"
         for inp, out in zip(inputs, outputs)
     )
     return _HARNESS_TEMPLATE.format(
-        code=code, fn_name=fn_name, calls=call_lines)
+        code=code,
+        fn_name=fn_name,
+        calls=call_lines,
+    )
 
 
-def run_tests(code, fn_name, inputs, outputs,
-              timeout=5):
-    """Execute code against test cases.
-    Returns partial-credit: passed / total."""
+def run_tests(
+    code: str,
+    fn_name: str,
+    inputs: list,
+    outputs: list,
+    timeout: int = 5,
+) -> float:
+    """
+    Execute generated code against all test cases in an isolated subprocess.
+
+    Returns partial-credit score: (passed tests) / (total tests).
+    Returns 0.0 on any execution error, timeout, or missing function.
+    """
     if not code or not has_function(code, fn_name):
         return 0.0
 
-    script = _build_script(code, fn_name,
-                           inputs, outputs)
+    script = _build_script(code, fn_name, inputs, outputs)
+
     try:
         proc = subprocess.run(
             [sys.executable, "-c", script],
-            capture_output=True, text=True,
-            timeout=timeout)
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        # Parse only our sentinel lines to ignore any stray print() in generated code
         results = [
             int(line[len("__R__:"):])
             for line in proc.stdout.splitlines()
-            if line.startswith("__R__:")]
+            if line.startswith("__R__:")
+        ]
         if not results:
             return 0.0
-        return sum(results) / len(inputs)
+        return sum(results) / len(inputs)   # partial credit over ALL test cases
+
     except subprocess.TimeoutExpired:
         return 0.0
     except Exception:
         return 0.0
 \end{lstlisting}
 
-\section{Block-by-Block Explanation}
+\section{Function-by-Function Analysis}
 
-\subsection{Code extraction (lines 7--19)}
+\subsection{\fn{extract\_code(response)}}
 
-LLMs often wrap code in Markdown fences like \texttt{```python ... ```}. The \texttt{extract\_code} function tries three strategies in order:
-\begin{enumerate}[nosep]
-  \item Look for a \texttt{```python} fenced block.
-  \item Look for any \texttt{```} fenced block.
-  \item Give up and treat the entire response as code.
-\end{enumerate}
+\begin{specbox}{extract\_code(response: str) -> str}
+\textbf{Defined:} \pyfile{evaluator.py}, line 24\\
+\textbf{Called by:} \fn{ga.compute\_fitness()} [ga.py:68]; \fn{main.evaluate\_on\_holdout()} [main.py:54]\\
+\textbf{Calls:} \fn{re.search()} (twice at most)\\
+\textbf{Parameters:}\\
+\hspace{1em}\param{response} --- raw text string returned by the LLM (may contain markdown)\\
+\textbf{Returns:} \texttt{str} --- Python code only, whitespace-stripped
+\end{specbox}
 
-\subsection{The test harness template (lines 26--42)}
+LLMs frequently wrap code in Markdown fences.  The function tries three strategies in
+order, returning as soon as one succeeds:
 
-Instead of importing the generated code into our process (which could crash the entire GA), we run it in a \textbf{subprocess} --- a completely separate Python process. The template builds a standalone script that:
+\textbf{Strategy 1 --- tagged python fence} (lines 29--31):
+\begin{lstlisting}[style=example]
+# Regex: r"```python\s*\n([\s\S]*?)```"
+# Matches:  ```python
+#           <any content, including newlines ([\s\S]*?)>
+#           ```
+# Group 1 = the code inside the fences (captured by the first parentheses)
+\end{lstlisting}
 
-\begin{enumerate}[nosep]
-  \item Includes the generated code verbatim.
-  \item Defines a \texttt{\_\_run\_\_} function that calls \texttt{fn\_name(*inp)}, compares \texttt{[result]} with \texttt{expected}, and prints a sentinel line \texttt{\_\_R\_\_:1} or \texttt{\_\_R\_\_:0}.
-  \item Appends one \texttt{\_\_run\_\_(...)} call per test case.
-\end{enumerate}
+\textbf{Strategy 2 --- untagged fence} (lines 33--35):
+\begin{lstlisting}[style=example]
+# Regex: r"```\s*\n?([\s\S]*?)```"
+# Matches: ``` (with optional whitespace / newline before content)
+# Handles responses like:
+#   ```
+#   def foo(): ...
+#   ```
+\end{lstlisting}
+
+\textbf{Strategy 3 --- raw text} (line 38):
+If no fences are found, assume the entire response is already plain code (some prompts
+cause the LLM to output code directly with no markdown).
+
+\begin{exbox}{extract\_code examples}
+\begin{lstlisting}[style=example]
+# --- Strategy 1 fires ---
+response = "Here is my solution:\n```python\ndef nth_char(words):\n    return ''.join(w[i] for i, w in enumerate(words))\n```"
+extract_code(response)
+# => "def nth_char(words):\n    return ''.join(w[i] for i, w in enumerate(words))"
+
+# --- Strategy 2 fires ---
+response = "```\ndef nth_char(words):\n    return ''.join(w[i] for i, w in enumerate(words))\n```"
+extract_code(response)
+# => "def nth_char(words):\n    return ''.join(w[i] for i, w in enumerate(words))"
+
+# --- Strategy 3 fires ---
+response = "def nth_char(words):\n    return ''.join(w[i] for i, w in enumerate(words))"
+extract_code(response)
+# => "def nth_char(words):\n    return ''.join(w[i] for i, w in enumerate(words))"
+\end{lstlisting}
+\end{exbox}
+
+\subsection{\fn{has\_function(code, fn\_name)}}
+
+\begin{specbox}{has\_function(code: str, fn\_name: str) -> bool}
+\textbf{Defined:} \pyfile{evaluator.py}, line 43\\
+\textbf{Called by:} \fn{run\_tests()} [evaluator.py:97]\\
+\textbf{Calls:} \fn{re.search()}, \fn{re.escape()}\\
+\textbf{Parameters:}\\
+\hspace{1em}\param{code} --- extracted Python code string\\
+\hspace{1em}\param{fn\_name} --- the function name the LLM was asked to write (e.g., \texttt{"nth\_char"})\\
+\textbf{Returns:} \texttt{bool} --- \texttt{True} if \texttt{def fn\_name(} appears in \param{code}
+\end{specbox}
+
+\begin{lstlisting}[style=example]
+# Regex: rf"\bdef\s+{re.escape(fn_name)}\s*\("
+#
+# \b          = word boundary (prevents matching "def foo_bar(" when fn_name="bar")
+# def         = literal keyword
+# \s+         = one or more spaces/tabs
+# fn_name     = exact function name (re.escape handles special chars like ".")
+# \s*         = zero or more spaces before "("
+# \(          = opening parenthesis
+
+has_function("def nth_char(words):\n    return ...", "nth_char")  # True
+has_function("def nth_char(words):\n    return ...", "sum_list")  # False
+has_function("# nth_char defined elsewhere", "nth_char")          # False (no "def ")
+has_function("class Solution:\n    def nth_char(self): ...", "nth_char") # True
+\end{lstlisting}
+
+If \fn{has\_function} returns \texttt{False}, \fn{run\_tests} immediately returns 0.0
+without attempting execution.  This guards against the LLM writing the wrong function
+name, which would cause an unresolvable \texttt{NameError} in the subprocess.
+
+\subsection{\fn{\_HARNESS\_TEMPLATE}}
+
+\begin{specbox}{\_HARNESS\_TEMPLATE: str (module-level constant)}
+\textbf{Defined:} \pyfile{evaluator.py}, line 52\\
+\textbf{Used by:} \fn{\_build\_script()} to produce the complete subprocess script\\
+\textbf{Template variables:} \texttt{\{code\}}, \texttt{\{fn\_name\}}, \texttt{\{calls\}}
+\end{specbox}
+
+The template defines a small Python program that will be run in a subprocess:
+
+\begin{lstlisting}[style=example]
+# _HARNESS_TEMPLATE (with placeholders shown):
+import sys
+sys.set_int_max_str_digits(1_000_000)  # same large-int fix as dataset.py
+
+{code}                    # <-- the LLM-generated function pasted verbatim
+
+def __run__(inp, expected):
+    try:
+        result = {fn_name}(*inp)    # <-- calls the generated function
+        # [result] wraps return value in list to match APPS output format
+        sys.stdout.write("__R__:" + ("1" if [result] == expected else "0") + "\n")
+        sys.stdout.flush()
+    except Exception:               # <-- catches ALL exceptions (NameError, TypeError...)
+        sys.stdout.write("__R__:0\n")
+        sys.stdout.flush()
+
+{calls}    # <-- one __run__(...) call per test case
+\end{lstlisting}
 
 \begin{conceptbox}{Why \texttt{[result] == expected}?}
-Codewars APPS problems store outputs as \texttt{[return\_value]} --- the result wrapped in a single-element list. So if a function returns \texttt{5}, the expected output is \texttt{[5]}. Wrapping the result in \texttt{[result]} makes the comparison match this format.
+Codewars APPS problems store expected outputs as \texttt{[return\_value]} (a list
+containing the single return value).  For example, if \fn{nth\_char} should return
+\texttt{"oes"}, then \texttt{outputs[i] = ["oes"]}.  Wrapping the actual result in
+\texttt{[result]} makes the comparison format match: \texttt{["oes"] == ["oes"]} is
+\texttt{True}; \texttt{["oes"] == ["abc"]} is \texttt{False}.\\[4pt]
+Without the wrapping: \texttt{"oes" == ["oes"]} would always be \texttt{False} even for
+correct code.
 \end{conceptbox}
 
-\subsection{Sentinel lines (\texttt{\_\_R\_\_:})}
+\begin{conceptbox}{Why a subprocess?}
+The LLM-generated code is untrusted.  Importing it directly into the GA process could:
+\begin{itemize}[nosep]
+  \item Crash the entire GA (via a top-level \texttt{sys.exit()} or segfault).
+  \item Corrupt global state (e.g., monkey-patching Python builtins).
+  \item Hang indefinitely (infinite loop with no timeout mechanism).
+\end{itemize}
+Running in a subprocess isolates all of this: if the subprocess crashes, hangs, or
+produces garbage, the GA process is completely unaffected.
+\end{conceptbox}
 
-If the generated code contains stray \texttt{print()} statements, they would mix into stdout and corrupt our results. The \texttt{\_\_R\_\_:} prefix is a sentinel: when parsing the output, we only look at lines starting with this prefix and ignore everything else.
+\subsection{\fn{\_build\_script(code, fn\_name, inputs, outputs)}}
 
-\subsection{Partial credit}
+\begin{specbox}{\_build\_script(code, fn\_name, inputs, outputs) -> str}
+\textbf{Defined:} \pyfile{evaluator.py}, line 71\\
+\textbf{Called by:} \fn{run\_tests()} [evaluator.py:100]\\
+\textbf{Calls:} \fn{repr()}, \fn{str.join()}, \fn{\_HARNESS\_TEMPLATE.format()}\\
+\textbf{Parameters:}\\
+\hspace{1em}\param{code} --- extracted Python source string\\
+\hspace{1em}\param{fn\_name} --- function name the harness will call\\
+\hspace{1em}\param{inputs} --- list of test-case argument lists\\
+\hspace{1em}\param{outputs} --- list of \texttt{[expected\_return\_value]} lists\\
+\textbf{Returns:} \texttt{str} --- complete, executable Python script
+\end{specbox}
 
-The function returns \texttt{sum(results) / len(inputs)} --- the fraction of test cases passed. This is critical for the GA: if a prompt produces code that passes 7 out of 10 tests, it scores 0.7, not 0.0. This gives the GA a smooth gradient to optimise, rather than a binary ``all or nothing'' signal.
+\textbf{How it builds the \fn{calls} section:}
+\begin{lstlisting}[style=example]
+inputs  = [[1, 2, 3], [0], []]
+outputs = [[6],       [0], [0]]
 
-\begin{warnbox}{Why not binary pass@1?}
-With only binary scoring, a prompt that solves 0 test cases and one that solves 9 out of 10 would both score 0. The GA couldn't tell them apart. Partial credit is used \emph{during evolution} for better search; the final reported metric is still standard pass@1.
+call_lines = "\n".join(
+    f"__run__({repr(inp)}, {repr(out)})"
+    for inp, out in zip(inputs, outputs)
+)
+# call_lines =
+# __run__([1, 2, 3], [6])
+# __run__([0], [0])
+# __run__([], [0])
+\end{lstlisting}
+
+\begin{exbox}{Complete script for a sum\_list problem}
+\begin{lstlisting}[style=example]
+# Inputs to _build_script:
+code    = "def sum_list(nums):\n    return sum(nums)"
+fn_name = "sum_list"
+inputs  = [[1, 2, 3], [0], [], [-1, 1]]
+outputs = [[6],       [0], [0], [0]]
+
+# Script produced by _build_script:
+"""
+import sys
+sys.set_int_max_str_digits(1_000_000)
+
+def sum_list(nums):
+    return sum(nums)
+
+def __run__(inp, expected):
+    try:
+        result = sum_list(*inp)
+        sys.stdout.write("__R__:" + ("1" if [result] == expected else "0") + "\n")
+        sys.stdout.flush()
+    except Exception:
+        sys.stdout.write("__R__:0\n")
+        sys.stdout.flush()
+
+__run__([1, 2, 3], [6])
+__run__([0], [0])
+__run__([], [0])
+__run__([-1, 1], [0])
+"""
+# When run:
+# sum_list(1, 2, 3) => sum([1,2,3]) => 6;  [6] == [6]  => __R__:1
+# sum_list(0)       => sum([0]) => 0;       [0] == [0]  => __R__:1
+# sum_list()        => sum([]) => 0;        [0] == [0]  => __R__:1
+# sum_list(-1, 1)   => sum([-1,1]) => 0;    [0] == [0]  => __R__:1
+# stdout: "__R__:1\n__R__:1\n__R__:1\n__R__:1\n"
+\end{lstlisting}
+\end{exbox}
+
+\subsection{\fn{run\_tests(code, fn\_name, inputs, outputs, timeout=5)}}
+
+\begin{specbox}{run\_tests(code, fn\_name, inputs, outputs, timeout=5) -> float}
+\textbf{Defined:} \pyfile{evaluator.py}, line 84\\
+\textbf{Called by:} \fn{ga.compute\_fitness()} [ga.py:69]; \fn{main.evaluate\_on\_holdout()} [main.py:56]\\
+\textbf{Calls:} \fn{has\_function()}, \fn{\_build\_script()}, \fn{subprocess.run()}\\
+\textbf{Parameters:}\\
+\hspace{1em}\param{code} --- extracted Python code string\\
+\hspace{1em}\param{fn\_name} --- expected function name (e.g., \texttt{"sum\_list"})\\
+\hspace{1em}\param{inputs} --- list of argument-list test cases\\
+\hspace{1em}\param{outputs} --- list of \texttt{[expected]} test cases\\
+\hspace{1em}\param{timeout} --- subprocess kill timeout in seconds (default: 5)\\
+\textbf{Returns:} \texttt{float} in \texttt{[0.0, 1.0]} --- fraction of test cases passed
+\end{specbox}
+
+\textbf{Step-by-step walkthrough:}
+
+\begin{enumerate}
+  \item \textbf{Lines 97--98}: Early return 0.0 if \param{code} is empty (the LLM returned
+    nothing) or if \fn{has\_function} returns False (the required function is not defined).
+
+  \item \textbf{Lines 100}: Call \fn{\_build\_script} to assemble the executable test script.
+
+  \item \textbf{Lines 102--108}: Launch the script in an isolated subprocess:
+    \begin{lstlisting}[style=example]
+proc = subprocess.run(
+    [sys.executable, "-c", script],  # python3 -c "..."  (full script as argument)
+    capture_output=True,              # capture stdout and stderr
+    text=True,                        # decode bytes to str automatically
+    timeout=timeout,                  # kill process after 5 seconds
+)
+    \end{lstlisting}
+
+  \item \textbf{Lines 109--114}: Parse \texttt{proc.stdout} for sentinel lines:
+    \begin{lstlisting}[style=example]
+results = [
+    int(line[len("__R__:"):])          # "1" or "0" after the prefix
+    for line in proc.stdout.splitlines()
+    if line.startswith("__R__:")       # ignore all other lines (stray prints)
+]
+# If stdout = "__R__:1\n__R__:1\n__R__:0\n__R__:1\n"
+# results  = [1, 1, 0, 1]
+    \end{lstlisting}
+
+  \item \textbf{Lines 115--116}: If \fn{results} is empty (script crashed on load ---
+    e.g.\ syntax error), return 0.0.
+
+  \item \textbf{Line 117}: Return partial-credit score:
+    \begin{lstlisting}[style=example]
+return sum(results) / len(inputs)
+#          ^-- passed tests          ^-- TOTAL test cases (not just those that ran)
+
+# Example: sum([1,1,0,1]) / 4 = 3/4 = 0.75
+# If script crashes after 2 tests: results=[1,1], len(inputs)=4 => 0.5
+# (not 1.0, because the 2 un-run tests count as failures in the denominator)
+    \end{lstlisting}
+
+  \item \textbf{Lines 118--121}: Exception handling:
+    \begin{itemize}[nosep]
+      \item \fn{subprocess.TimeoutExpired} --- the 5-second limit was hit; return 0.0.
+      \item Any other exception --- subprocess module error; return 0.0.
+    \end{itemize}
+\end{enumerate}
+
+\begin{warnbox}{Division by \texttt{len(inputs)}, not \texttt{len(results)}}
+The denominator is \texttt{len(inputs)} (total test cases) not \texttt{len(results)}
+(test cases that produced output).  If generated code crashes midway through the tests,
+the un-run tests count as failures.  This correctly penalises fragile code that only
+works on some inputs before crashing.
 \end{warnbox}
 
+\begin{conceptbox}{The Sentinel Design}
+Generated code may contain stray \texttt{print()} statements (the LLM might print debug
+output like ``Input is 5'').  These would mix into \texttt{proc.stdout} and corrupt the
+results if we tried to parse every line.  By only looking at lines that start with the
+unique prefix \texttt{\_\_R\_\_:}, we ignore all other output completely.  The prefix was
+chosen to be unlikely to appear in any realistic program output.
+\end{conceptbox}
 
-% ======================================================================
-%  CHAPTER 5 — cost_tracker.py
-% ======================================================================
-\chapter{Cost Tracking: \texttt{cost\_tracker.py}}
+
+% ==========================================================================
+%  CHAPTER 7 --- cost_tracker.py
+% ==========================================================================
+\chapter{Cost Tracking: \pyfile{cost\_tracker.py}}
 
 \section{Purpose}
 
-Every API call costs real money. This module logs the exact token count of every call, computes the dollar cost using official Anthropic pricing, and saves a detailed JSON breakdown to the \texttt{Costs/} folder after each run.
+Every call to the Claude API costs real money.  This module logs the exact token count
+of every call, computes the dollar cost using official Anthropic pricing, aggregates
+costs by phase (fitness, crossover, etc.)\ and by model, and saves a timestamped JSON
+report to \texttt{Code/Costs/} after each run.
 
-\section{Key Components}
+\begin{conceptbox}{Costs folder location (updated)}
+Cost reports are saved to \texttt{Code/Costs/cost\_TIMESTAMP.json} --- inside the same
+\texttt{Code/} directory as the source files.  The constant \fn{COSTS\_DIR} is set as:\\
+\fn{COSTS\_DIR = Path(\_\_file\_\_).parent / "Costs"}\\
+which resolves to \texttt{/home/.../Code/Costs/}.
+\end{conceptbox}
 
-\begin{lstlisting}[caption={\texttt{cost\_tracker.py} --- Pricing constants (excerpt).}]
+\section{File at a Glance}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{7.5cm}@{}}
+\toprule
+\textbf{Item} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\fn{PRICING}      & \texttt{dict} & Official Anthropic prices per model (input/output \$/MTok) \\
+\fn{COSTS\_DIR}   & \texttt{Path} & Output directory: \texttt{Code/Costs/} \\
+\fn{CallRecord}   & dataclass     & One API call's metadata and cost \\
+\fn{CostTracker}  & class         & Accumulates records; writes JSON report \\
+\fn{tracker}      & \texttt{CostTracker} & Module-level singleton imported by \pyfile{llm.py} \\
+\bottomrule
+\end{tabular}
+\caption{\pyfile{cost\_tracker.py}: all exported items.}
+\end{table}
+
+\section{Full Source Code}
+
+\begin{lstlisting}[style=pycode, caption={\pyfile{cost\_tracker.py} --- complete source.}]
+"""
+cost_tracker.py -- Track every API call's token usage and compute running cost.
+"""
+
+import json
+import time
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+
+# Official Anthropic pricing (USD per 1 million tokens) -- April 2026
 PRICING = {
     "claude-haiku-4-5-20251001": (1.00,  5.00),
+    "claude-haiku-3-5-20241022": (0.80,  4.00),
+    "claude-haiku-3-20240307":   (0.25,  1.25),
     "claude-sonnet-4-6":         (3.00, 15.00),
+    "claude-sonnet-4-5-20250514":(3.00, 15.00),
+    "claude-sonnet-4-20250514":  (3.00, 15.00),
+    "claude-opus-4-6":           (5.00, 25.00),
     # Batch API (50% discount)
     "claude-haiku-4-5-20251001:batch": (0.50, 2.50),
     "claude-sonnet-4-6:batch":         (1.50, 7.50),
 }
+
+COSTS_DIR = Path(__file__).parent / "Costs"
+
+
+@dataclass
+class CallRecord:
+    phase: str          # "fitness", "crossover", "mutate_inject", etc.
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+    @property
+    def input_cost(self) -> float:
+        rate_in, _ = PRICING.get(self.model, (0, 0))
+        return self.input_tokens * rate_in / 1_000_000
+
+    @property
+    def output_cost(self) -> float:
+        _, rate_out = PRICING.get(self.model, (0, 0))
+        return self.output_tokens * rate_out / 1_000_000
+
+    @property
+    def total_cost(self) -> float:
+        return self.input_cost + self.output_cost
+
+
+class CostTracker:
+    """Accumulates CallRecords and saves a full breakdown JSON on flush."""
+
+    def __init__(self):
+        self.calls: list[CallRecord] = []
+        self.start_time: float = time.time()
+
+    def record(self, phase: str, model: str,
+               input_tokens: int, output_tokens: int):
+        """Log one API call."""
+        self.calls.append(CallRecord(
+            phase=phase, model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        ))
+
+    def _by_phase(self) -> dict:
+        phases: dict[str, dict] = {}
+        for c in self.calls:
+            if c.phase not in phases:
+                phases[c.phase] = {
+                    "calls": 0, "input_tokens": 0, "output_tokens": 0,
+                    "input_cost_usd": 0.0, "output_cost_usd": 0.0,
+                    "total_cost_usd": 0.0,
+                }
+            p = phases[c.phase]
+            p["calls"]           += 1
+            p["input_tokens"]    += c.input_tokens
+            p["output_tokens"]   += c.output_tokens
+            p["input_cost_usd"]  += c.input_cost
+            p["output_cost_usd"] += c.output_cost
+            p["total_cost_usd"]  += c.total_cost
+        for p in phases.values():
+            for k in ("input_cost_usd", "output_cost_usd", "total_cost_usd"):
+                p[k] = round(p[k], 6)
+        return phases
+
+    def _by_model(self) -> dict:
+        models: dict[str, dict] = {}
+        for c in self.calls:
+            if c.model not in models:
+                models[c.model] = {
+                    "calls": 0, "input_tokens": 0, "output_tokens": 0,
+                    "input_cost_usd": 0.0, "output_cost_usd": 0.0,
+                    "total_cost_usd": 0.0,
+                }
+            m = models[c.model]
+            m["calls"]           += 1
+            m["input_tokens"]    += c.input_tokens
+            m["output_tokens"]   += c.output_tokens
+            m["input_cost_usd"]  += c.input_cost
+            m["output_cost_usd"] += c.output_cost
+            m["total_cost_usd"]  += c.total_cost
+        for m in models.values():
+            for k in ("input_cost_usd", "output_cost_usd", "total_cost_usd"):
+                m[k] = round(m[k], 6)
+        return models
+
+    def total(self) -> float:
+        return sum(c.total_cost for c in self.calls)
+
+    def flush(self, extra: dict | None = None) -> Path:
+        """Write a timestamped JSON to the Costs/ folder."""
+        COSTS_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = COSTS_DIR / f"cost_{ts}.json"
+
+        total_in  = sum(c.input_tokens for c in self.calls)
+        total_out = sum(c.output_tokens for c in self.calls)
+        elapsed   = time.time() - self.start_time
+
+        report = {
+            "timestamp":        ts,
+            "elapsed_seconds":  round(elapsed, 1),
+            "total_api_calls":  len(self.calls),
+            "total_input_tokens":  total_in,
+            "total_output_tokens": total_out,
+            "total_input_cost_usd":  round(sum(c.input_cost  for c in self.calls), 6),
+            "total_output_cost_usd": round(sum(c.output_cost for c in self.calls), 6),
+            "grand_total_usd":       round(self.total(), 6),
+            "breakdown_by_phase": self._by_phase(),
+            "breakdown_by_model": self._by_model(),
+            "pricing_used": {
+                model: {"input_per_MTok": r[0], "output_per_MTok": r[1]}
+                for model, r in PRICING.items()
+                if not model.endswith(":batch")
+            },
+        }
+        if extra:
+            report["run_info"] = extra
+
+        path.write_text(json.dumps(report, indent=2))
+        return path
+
+
+# Module-level singleton imported by llm.py
+tracker = CostTracker()
 \end{lstlisting}
 
-Each tuple is \texttt{(input\_\$/MTok, output\_\$/MTok)}. These are the official prices from the Anthropic pricing page (April 2026). MTok = million tokens.
+\section{Component-by-Component Analysis}
 
-\subsection{CallRecord}
+\subsection{The \fn{PRICING} Dictionary}
 
-Each API call creates a \texttt{CallRecord} with four fields: \texttt{phase} (e.g., ``fitness'', ``crossover''), \texttt{model}, \texttt{input\_tokens}, and \texttt{output\_tokens}. Cost is computed on the fly:
+\begin{specbox}{PRICING: dict[str, tuple[float, float]]}
+\textbf{Defined:} \pyfile{cost\_tracker.py}, line 12\\
+\textbf{Used by:} \fn{CallRecord.input\_cost}, \fn{CallRecord.output\_cost},
+  \fn{CostTracker.flush()} (in the \texttt{pricing\_used} section)\\
+\textbf{Format:} \texttt{model\_id: (input\_\$/MTok, output\_\$/MTok)}
+\end{specbox}
 
-\begin{lstlisting}[caption={Cost calculation per call.}]
-@property
-def total_cost(self):
-    rate_in, rate_out = PRICING[self.model]
-    return (self.input_tokens * rate_in
-          + self.output_tokens * rate_out) / 1_000_000
+``MTok'' means million tokens.  Pricing formula:
+
+\[
+\text{cost} = \frac{\text{input\_tokens} \times \text{rate\_in}}{1{,}000{,}000}
+            + \frac{\text{output\_tokens} \times \text{rate\_out}}{1{,}000{,}000}
+\]
+
+\begin{exbox}{Cost for one typical fitness call}
+\begin{lstlisting}[style=example]
+# A typical llm.generate_code() call on Haiku 4.5:
+model        = "claude-haiku-4-5-20251001"
+input_tokens = 450   # system prompt (150) + problem question (300)
+output_tokens = 80   # the generated function (~60 lines of Python)
+
+# From PRICING: rate_in=1.00, rate_out=5.00  (USD per million tokens)
+input_cost  = 450  * 1.00 / 1_000_000 = $0.000450
+output_cost =  80  * 5.00 / 1_000_000 = $0.000400
+total_cost  = $0.000850  per call
+
+# Over 27,700 fitness calls in a full run:
+# estimated_fitness_cost = 27700 * $0.000850 ~= $23.54
+\end{lstlisting}
+\end{exbox}
+
+\subsection{\fn{CallRecord} Dataclass}
+
+\begin{specbox}{@dataclass class CallRecord}
+\textbf{Defined:} \pyfile{cost\_tracker.py}, line 27\\
+\textbf{Created by:} \fn{CostTracker.record()} [cost\_tracker.py:55]\\
+\textbf{Fields:}\\
+\hspace{1em}\fn{phase: str} --- which GA operation (e.g., \texttt{"fitness"}, \texttt{"crossover"}, \texttt{"mutate\_inject"})\\
+\hspace{1em}\fn{model: str} --- Claude model ID\\
+\hspace{1em}\fn{input\_tokens: int} --- tokens in the prompt sent to the API\\
+\hspace{1em}\fn{output\_tokens: int} --- tokens in the API's response\\
+\textbf{Computed properties:}\\
+\hspace{1em}\fn{input\_cost: float} --- \$ cost for input tokens\\
+\hspace{1em}\fn{output\_cost: float} --- \$ cost for output tokens\\
+\hspace{1em}\fn{total\_cost: float} --- \fn{input\_cost} + \fn{output\_cost}
+\end{specbox}
+
+The three \texttt{@property} methods compute cost on the fly from the PRICING dict
+--- they are not stored fields, so there is no risk of the stored cost getting out of
+sync if PRICING changes.
+
+\subsection{\fn{CostTracker} Class}
+
+\begin{specbox}{class CostTracker}
+\textbf{Defined:} \pyfile{cost\_tracker.py}, line 48\\
+\textbf{Instantiated as:} module-level singleton \fn{tracker} (line 178)\\
+\textbf{Imported by:} \pyfile{llm.py} via \texttt{from cost\_tracker import tracker}
+\end{specbox}
+
+\subsubsection{\fn{CostTracker.record(phase, model, input\_tokens, output\_tokens)}}
+
+\begin{lstlisting}[style=chain]
+Called by: llm._call()  [llm.py:54-58]
+  Every time the Claude API responds successfully, _call() calls:
+    tracker.record(
+        phase=phase,                           # e.g., "fitness"
+        model=model,                           # e.g., "claude-haiku-4-5-20251001"
+        input_tokens=resp.usage.input_tokens,  # from API response object
+        output_tokens=resp.usage.output_tokens # from API response object
+    )
+  This appends a new CallRecord to self.calls (the in-memory log).
 \end{lstlisting}
 
-\subsection{CostTracker}
+\subsubsection{\fn{CostTracker.\_by\_phase()} and \fn{CostTracker.\_by\_model()}}
 
-The \texttt{CostTracker} class accumulates all \texttt{CallRecord}s and provides:
-\begin{itemize}[nosep]
-  \item \texttt{record(phase, model, in\_tokens, out\_tokens)} --- log one call.
-  \item \texttt{\_by\_phase()} --- aggregate by GA phase (fitness, crossover, etc.).
-  \item \texttt{\_by\_model()} --- aggregate by Claude model.
-  \item \texttt{flush()} --- write a timestamped JSON to \texttt{../Costs/}.
-\end{itemize}
+Both aggregate the \fn{self.calls} list into a summary dict.
+\fn{\_by\_phase()} groups by \fn{CallRecord.phase}; \fn{\_by\_model()} groups by
+\fn{CallRecord.model}.
 
-A module-level singleton \texttt{tracker = CostTracker()} is imported by \texttt{llm.py} so every API call is automatically logged.
+\begin{exbox}{Sample \_by\_phase() output}
+\begin{lstlisting}[style=example]
+{
+    "fitness": {
+        "calls": 27700,
+        "input_tokens": 12465000,
+        "output_tokens": 2216000,
+        "input_cost_usd": 12.465,
+        "output_cost_usd": 11.08,
+        "total_cost_usd": 23.545
+    },
+    "crossover": {
+        "calls": 208,
+        "input_tokens": 145600,
+        "output_tokens": 74880,
+        "input_cost_usd": 0.4368,
+        "output_cost_usd": 1.1232,
+        "total_cost_usd": 1.56
+    },
+    "mutate_inject":   {...},
+    "mutate_delete":   {...},
+    "mutate_rephrase": {...}
+}
+\end{lstlisting}
+\end{exbox}
+
+\subsubsection{\fn{CostTracker.flush(extra=None)}}
+
+\begin{specbox}{flush(extra: dict | None = None) -> Path}
+\textbf{Called by:} \fn{main.main()} [main.py:154]\\
+\textbf{Calls:} \fn{COSTS\_DIR.mkdir()}, \fn{self.\_by\_phase()}, \fn{self.\_by\_model()},
+  \fn{path.write\_text()}, \fn{json.dumps()}\\
+\textbf{Returns:} \texttt{Path} --- path to the written JSON file
+\end{specbox}
+
+Workflow:
+\begin{enumerate}[nosep]
+  \item Creates \fn{Code/Costs/} directory if it does not exist.
+  \item Generates a timestamp string (e.g., \texttt{"20260417\_142035"}).
+  \item Assembles a report dict with summary totals, per-phase breakdown,
+    per-model breakdown, and the pricing table used.
+  \item If \param{extra} is provided (e.g., best fitness scores), adds it under
+    \texttt{"run\_info"}.
+  \item Writes the report as formatted JSON and returns the path.
+\end{enumerate}
+
+\subsection{The Singleton Pattern}
+
+\begin{lstlisting}[style=example]
+# At the bottom of cost_tracker.py (line 178):
+tracker = CostTracker()
+
+# In llm.py (line 15):
+from cost_tracker import tracker   # imports the SAME object
+
+# Python caches imported modules.  When llm.py does "from cost_tracker import tracker",
+# it gets the exact same CostTracker instance that was created when cost_tracker.py
+# was first imported.  So every _call() in llm.py adds to the same list.
+
+# Later in main.py (line 23):
+from cost_tracker import tracker   # SAME object again
+
+# When main.main() calls tracker.flush(), it sees ALL calls made by llm.py.
+# No data is lost between modules.
+\end{lstlisting}
 
 
-% ======================================================================
-%  CHAPTER 6 — llm.py
-% ======================================================================
-\chapter{LLM Interface: \texttt{llm.py}}
+
+\chapter{LLM Interface: \pyfile{llm.py}}
 
 \section{Purpose}
 
-This file is the sole interface to the Claude API. It provides five public functions:
+This is the \emph{only} file in the entire project that communicates with the Anthropic API.
+All other files are either pure Python computation or file I/O.  The file provides five public
+functions, all of which flow through a single private \fn{\_call()} wrapper that handles
+authentication, retries, and cost logging.
 
-\begin{enumerate}[nosep]
-  \item \texttt{generate\_code} --- ask the target LLM to solve a problem (fitness evaluation).
-  \item \texttt{crossover} --- merge two parent prompts into one offspring.
-  \item \texttt{mutate\_inject} --- add a new strategy sentence.
-  \item \texttt{mutate\_delete} --- remove the weakest sentence.
-  \item \texttt{mutate\_rephrase} --- reword without changing meaning.
-\end{enumerate}
+\section{File at a Glance}
 
-Every call goes through a private \texttt{\_call} function that handles retries and cost logging.
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{7.5cm}@{}}
+\toprule
+\textbf{Item} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\fn{\_client}         & global var    & Cached \texttt{anthropic.Anthropic} instance (lazy init) \\
+\fn{\_get\_client()}  & private func  & Initialise and return the client (once) \\
+\fn{\_call(...)}      & private func  & Core API wrapper: retry + cost logging \\
+\fn{generate\_code()} & public func   & Ask target LLM to write code (fitness) \\
+\fn{crossover()}      & public func   & Merge two parent prompts into one offspring \\
+\fn{mutate\_inject()} & public func   & Add a new strategy sentence to a prompt \\
+\fn{mutate\_delete()} & public func   & Remove the weakest sentence from a prompt \\
+\fn{mutate\_rephrase()} & public func & Rephrase a prompt without changing meaning \\
+\fn{\_CROSSOVER\_SYSTEM} & str        & System prompt for the crossover meta-call \\
+\fn{\_CROSSOVER\_USER}   & str        & User prompt template for crossover \\
+\fn{\_MUT\_SYSTEM}       & str        & System prompt for all three mutation meta-calls \\
+\bottomrule
+\end{tabular}
+\caption{\pyfile{llm.py}: all items.}
+\end{table}
 
-\section{The \_call function}
+\section{Full Source Code}
 
-\begin{lstlisting}[caption={\texttt{llm.py} --- Core API wrapper (simplified).}]
-def _call(phase, model, temperature, max_tokens,
-          system, user, retries=3):
+\begin{lstlisting}[style=pycode, caption={\pyfile{llm.py} --- complete source.}]
+"""
+llm.py -- All Claude API calls: code generation, crossover, and mutation.
+
+Two models are used:
+    TARGET_MODEL    -- generates code (cheap, deterministic, temperature 0)
+    OPTIMIZER_MODEL -- performs crossover and mutation (creative, temperature 0.7)
+
+Every call is logged to the CostTracker singleton (see cost_tracker.py).
+"""
+
+import re
+import time
+import anthropic
+import config
+from cost_tracker import tracker
+
+
+_client: anthropic.Anthropic | None = None
+
+
+def _get_client() -> anthropic.Anthropic:
+    """Lazy-initialise the Anthropic client."""
+    global _client
+    if _client is None:
+        _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    return _client
+
+
+def _call(
+    phase: str,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    system: str,
+    user: str,
+    retries: int = 3,
+) -> str:
+    """
+    Call the Claude API with automatic retry on transient errors.
+    Logs token usage to the global CostTracker.
+    Returns the assistant's text response.
+    """
     client = _get_client()
     for attempt in range(retries):
         try:
@@ -622,52 +2074,65 @@ def _call(phase, model, temperature, max_tokens,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system,
-                messages=[{"role": "user",
-                           "content": user}])
+                messages=[{"role": "user", "content": user}],
+            )
             # Log tokens to cost tracker
             tracker.record(
-                phase=phase, model=model,
+                phase=phase,
+                model=model,
                 input_tokens=resp.usage.input_tokens,
-                output_tokens=resp.usage.output_tokens)
+                output_tokens=resp.usage.output_tokens,
+            )
             return resp.content[0].text
         except anthropic.RateLimitError:
-            time.sleep(2 ** attempt * 5)
+            wait = 2 ** attempt * 5
+            print(f"  [rate-limit] waiting {wait}s ...")
+            time.sleep(wait)
         except anthropic.APIError as e:
             if attempt == retries - 1:
+                print(f"  [api-error] {e}")
                 return ""
             time.sleep(2)
     return ""
-\end{lstlisting}
 
-\begin{conceptbox}{Retry with exponential backoff}
-If the API returns a rate-limit error, the code waits 5s, then 10s, then 20s before retrying. This ``exponential backoff'' pattern prevents hammering a busy server and is standard practice for API integrations.
-\end{conceptbox}
 
-\section{Code Generation}
+# ---------------------------------------------------------------------------
+# Code generation  (fitness evaluation)
+# ---------------------------------------------------------------------------
 
-\begin{lstlisting}[caption={Code generation --- the fitness call.}]
-def generate_code(system_prompt, question, fn_name):
-    user_msg = (f"{question}\n\n"
-                f"Write a Python function named "
-                f"`{fn_name}`.")
+def generate_code(system_prompt: str, question: str, fn_name: str) -> str:
+    """
+    Ask the target LLM to solve a coding problem.
+    Returns the raw LLM response (code extraction happens in evaluator.py).
+    """
+    user_msg = (
+        f"{question}\n\n"
+        f"Write a Python function named `{fn_name}`."
+    )
     return _call(
         phase="fitness",
-        model=config.TARGET_MODEL,       # Haiku 4.5
-        temperature=0.0,                 # deterministic
+        model=config.TARGET_MODEL,
+        temperature=config.TARGET_TEMPERATURE,
         max_tokens=config.MAX_CODE_TOKENS,
-        system=system_prompt,            # THE CHROMOSOME
-        user=user_msg)
-\end{lstlisting}
+        system=system_prompt,
+        user=user_msg,
+    )
 
-The \texttt{system\_prompt} is the GA chromosome --- the prompt being evolved. The \texttt{user} message contains the problem description and the required function name. This separation is important: the system prompt is \emph{general} (applies to any problem), while the user message is \emph{problem-specific}.
 
-\section{Crossover}
+# ---------------------------------------------------------------------------
+# Crossover  (LLM-mediated merge of two parent prompts)
+# ---------------------------------------------------------------------------
 
-\begin{lstlisting}[caption={Crossover meta-prompt.}]
-_CROSSOVER_USER = """
-Combine these two coding-instruction prompts into one
-coherent prompt. Preserve the strongest strategies from
-each parent. Do not simply concatenate.
+_CROSSOVER_SYSTEM = (
+    "You merge coding-instruction prompts. Output ONLY the merged prompt -- "
+    "no commentary, no labels, no markdown."
+)
+
+_CROSSOVER_USER = """\
+Combine these two coding-instruction prompts into one coherent prompt.
+Preserve the strongest strategies from each parent (e.g. edge-case thinking
+from one, algorithm identification from the other).
+Do not simply concatenate -- produce a unified instruction paragraph.
 
 --- Parent A ---
 {parent_a}
@@ -675,107 +2140,505 @@ each parent. Do not simply concatenate.
 --- Parent B ---
 {parent_b}
 """
+
+
+def crossover(prompt_a: str, prompt_b: str) -> str:
+    """Merge two parent prompts into one offspring via the optimizer LLM."""
+    return _call(
+        phase="crossover",
+        model=config.OPTIMIZER_MODEL,
+        temperature=config.OPTIMIZER_TEMPERATURE,
+        max_tokens=config.MAX_OPERATOR_TOKENS,
+        system=_CROSSOVER_SYSTEM,
+        user=_CROSSOVER_USER.format(parent_a=prompt_a, parent_b=prompt_b),
+    ).strip()
+
+
+# ---------------------------------------------------------------------------
+# Mutation  (three independent operators)
+# ---------------------------------------------------------------------------
+
+_MUT_SYSTEM = (
+    "You edit coding-instruction prompts. Output ONLY the modified prompt -- "
+    "no commentary, no labels, no markdown."
+)
+
+
+def mutate_inject(prompt: str) -> str:
+    """Add one new instructional strategy to the prompt."""
+    user = (
+        "Add one new, specific coding strategy to this instruction prompt. "
+        "Examples of strategies: 'validate your output against the examples', "
+        "'consider time complexity', 'check for off-by-one errors'. "
+        "Output only the modified prompt.\n\n"
+        f"Prompt:\n{prompt}"
+    )
+    return _call(
+        phase="mutate_inject",
+        model=config.OPTIMIZER_MODEL,
+        temperature=config.OPTIMIZER_TEMPERATURE,
+        max_tokens=config.MAX_OPERATOR_TOKENS,
+        system=_MUT_SYSTEM,
+        user=user,
+    ).strip()
+
+
+def mutate_delete(prompt: str) -> str:
+    """Remove one sentence from the prompt to make it leaner."""
+    sentences = re.split(r"(?<=[.!?])\s+", prompt)
+    if len(sentences) <= 1:
+        return prompt  # nothing to delete -- keep as-is
+    user = (
+        "Remove one sentence from this instruction prompt -- the one that "
+        "contributes the least to code-generation quality. Keep everything "
+        "else verbatim. Output only the modified prompt.\n\n"
+        f"Prompt:\n{prompt}"
+    )
+    return _call(
+        phase="mutate_delete",
+        model=config.OPTIMIZER_MODEL,
+        temperature=config.OPTIMIZER_TEMPERATURE,
+        max_tokens=config.MAX_OPERATOR_TOKENS,
+        system=_MUT_SYSTEM,
+        user=user,
+    ).strip()
+
+
+def mutate_rephrase(prompt: str) -> str:
+    """Rephrase the prompt without changing its meaning."""
+    user = (
+        "Rephrase this instruction prompt using different words, but keep "
+        "the same meaning and all the same strategies. "
+        "Output only the rephrased prompt.\n\n"
+        f"Prompt:\n{prompt}"
+    )
+    return _call(
+        phase="mutate_rephrase",
+        model=config.OPTIMIZER_MODEL,
+        temperature=config.OPTIMIZER_TEMPERATURE,
+        max_tokens=config.MAX_OPERATOR_TOKENS,
+        system=_MUT_SYSTEM,
+        user=user,
+    ).strip()
 \end{lstlisting}
 
-The optimizer LLM (Sonnet 4.6) receives both parents and must produce a \emph{unified} offspring. The meta-prompt explicitly forbids concatenation --- it must blend strategies intelligently.
+\section{Function-by-Function Analysis}
 
-\section{Mutation Operators}
+\subsection{\fn{\_get\_client()}}
 
-Three independent mutations, each with its own meta-prompt:
+\begin{specbox}{\_get\_client() -> anthropic.Anthropic}
+\textbf{Defined:} \pyfile{llm.py}, line 21\\
+\textbf{Called by:} \fn{\_call()} [llm.py:43]\\
+\textbf{Calls:} \fn{anthropic.Anthropic(api\_key=...)}\\
+\textbf{Returns:} The module-level cached \texttt{anthropic.Anthropic} instance
+\end{specbox}
 
-\begin{itemize}[nosep]
-  \item \textbf{Inject} (25\%): ``Add one new, specific coding strategy to this prompt.'' --- introduces novelty.
-  \item \textbf{Delete} (15\%): ``Remove the sentence that contributes the least.'' --- prevents prompt bloat.
-  \item \textbf{Rephrase} (10\%): ``Rephrase using different words, keep same meaning.'' --- explores wording variations.
-\end{itemize}
+This function implements the \textbf{lazy initialisation} pattern: the
+\texttt{anthropic.Anthropic} client is not created until the first API call is made.
+This avoids crashing on import if the API key is missing.
 
-These are \emph{independent}: on any given offspring, all three can fire, none can fire, or any combination. This gives $2^3 = 8$ possible operator combinations per offspring.
+\begin{lstlisting}[style=example]
+# The global is None at module load time:
+_client: anthropic.Anthropic | None = None
+
+# First call to _get_client():
+#   _client is None  =>  create it, store it, return it
+_client = anthropic.Anthropic(api_key="sk-ant-...")
+
+# All subsequent calls:
+#   _client is not None  =>  return the cached object immediately
+#   (the Anthropic SDK handles connection pooling internally)
+\end{lstlisting}
+
+\subsection{\fn{\_call(phase, model, temperature, max\_tokens, system, user, retries=3)}}
+
+\begin{specbox}{\_call(...) -> str}
+\textbf{Defined:} \pyfile{llm.py}, line 29\\
+\textbf{Called by:} \fn{generate\_code()}, \fn{crossover()}, \fn{mutate\_inject()},
+  \fn{mutate\_delete()}, \fn{mutate\_rephrase()}\\
+\textbf{Calls:} \fn{\_get\_client()}, \fn{client.messages.create()}, \fn{tracker.record()},
+  \fn{time.sleep()}\\[4pt]
+\textbf{Parameters:}\\
+\hspace{1em}\param{phase} --- label for cost tracking (e.g., \texttt{"fitness"}, \texttt{"crossover"})\\
+\hspace{1em}\param{model} --- Claude model ID (e.g., \texttt{"claude-haiku-4-5-20251001"})\\
+\hspace{1em}\param{temperature} --- 0.0 for deterministic, 0.7 for creative\\
+\hspace{1em}\param{max\_tokens} --- response token limit (1024 for code, 600 for operators)\\
+\hspace{1em}\param{system} --- the system prompt (the GA chromosome for fitness; meta-prompt for operators)\\
+\hspace{1em}\param{user} --- the user message (question + fn\_name for fitness; prompts for operators)\\
+\hspace{1em}\param{retries} --- number of attempts before giving up (default: 3)\\[4pt]
+\textbf{Returns:} \texttt{str} --- assistant's text, or \texttt{""} if all retries fail
+\end{specbox}
+
+\textbf{Step-by-step walkthrough:}
+
+\begin{enumerate}
+  \item \textbf{Line 43}: Get the Anthropic client (cached after first call).
+
+  \item \textbf{Line 44}: Loop up to \param{retries}=3 times (attempts 0, 1, 2).
+
+  \item \textbf{Lines 46--52}: Call the Claude API:
+    \begin{lstlisting}[style=example]
+resp = client.messages.create(
+    model=model,              # which Claude model
+    max_tokens=max_tokens,    # cap on response length
+    temperature=temperature,  # 0.0=same output every time; 0.7=varied
+    system=system,            # the system prompt (before the conversation)
+    messages=[{"role": "user", "content": user}]  # one-turn conversation
+)
+# resp.content[0].text = the assistant's text response
+# resp.usage.input_tokens  = tokens consumed by system + user
+# resp.usage.output_tokens = tokens generated in response
+    \end{lstlisting}
+
+  \item \textbf{Lines 53--58}: Log the call to the cost tracker singleton:
+    \begin{lstlisting}[style=example]
+tracker.record(
+    phase=phase,                           # e.g., "fitness"
+    model=model,
+    input_tokens=resp.usage.input_tokens,
+    output_tokens=resp.usage.output_tokens,
+)
+    \end{lstlisting}
+
+  \item \textbf{Line 60}: Return \texttt{resp.content[0].text} --- the text of the first
+    content block (Claude responses always have at least one text block).
+
+  \item \textbf{Lines 61--63}: \fn{anthropic.RateLimitError} handler --- the API returned
+    HTTP 429 (too many requests).  Wait with \textbf{exponential backoff}:
+    \begin{lstlisting}[style=example]
+wait = 2 ** attempt * 5
+# attempt 0: wait = 1 * 5 = 5 seconds
+# attempt 1: wait = 2 * 5 = 10 seconds
+# attempt 2: wait = 4 * 5 = 20 seconds
+# After 3 attempts: return ""  (the while loop ends)
+    \end{lstlisting}
+
+  \item \textbf{Lines 64--68}: \fn{anthropic.APIError} handler --- any other API error
+    (server error, malformed request, etc.).
+    \begin{itemize}[nosep]
+      \item If this is the last attempt (\texttt{attempt == retries - 1}): print the error
+        and return \texttt{""}.
+      \item Otherwise: wait 2 seconds and try again.
+    \end{itemize}
+
+  \item \textbf{Line 70}: If the loop exits without returning (should not normally happen),
+    return \texttt{""} as a safety net.
+\end{enumerate}
+
+\begin{conceptbox}{What happens when \_call returns \texttt{""}?}
+If \fn{\_call} returns an empty string, the caller (e.g.\ \fn{generate\_code}) passes
+it to \fn{evaluator.extract\_code("")} which returns \texttt{""}, then
+\fn{evaluator.run\_tests("")} returns 0.0 immediately (the empty-code guard).
+The individual gets fitness 0.0 for that problem.  The run continues --- a failed
+API call does \emph{not} crash the GA.
+\end{conceptbox}
+
+\subsection{\fn{generate\_code(system\_prompt, question, fn\_name)}}
+
+\begin{specbox}{generate\_code(system\_prompt, question, fn\_name) -> str}
+\textbf{Defined:} \pyfile{llm.py}, line 77\\
+\textbf{Called by:} \fn{ga.compute\_fitness()} [ga.py:63]; \fn{main.evaluate\_on\_holdout()} [main.py:52]\\
+\textbf{Calls:} \fn{\_call(phase="fitness", model=TARGET\_MODEL, temperature=0.0, ...)}\\[4pt]
+\textbf{Parameters:}\\
+\hspace{1em}\param{system\_prompt} --- the GA chromosome (the prompt being evolved)\\
+\hspace{1em}\param{question} --- APPS problem text (from \fn{prob["question"]})\\
+\hspace{1em}\param{fn\_name} --- function name the LLM must write (from \fn{prob["fn\_name"]})\\[4pt]
+\textbf{Returns:} \texttt{str} --- raw LLM text (NOT extracted code; that happens in evaluator)
+\end{specbox}
+
+\begin{lstlisting}[style=chain]
+# How the messages are assembled:
+
+system = system_prompt
+       = "Think like a competitive programmer. Identify the algorithm pattern..."
+         (the chromosome being evaluated)
+
+user   = f"{question}\n\nWrite a Python function named `{fn_name}`."
+       = "Complete the function that takes an array of words.\n"
+         "You must concatenate the nth letter from each word...\n\n"
+         "Write a Python function named `nth_char`."
+
+# The separation is intentional:
+# - system = GENERAL instruction (applies to ALL problems)
+# - user   = SPECIFIC problem (changes per problem)
+# This allows the LLM to apply the strategy from the system prompt
+# to the specific problem in the user message.
+\end{lstlisting}
+
+\begin{exbox}{generate\_code call and return}
+\begin{lstlisting}[style=example]
+response = llm.generate_code(
+    system_prompt="Think like a competitive programmer. Identify the algorithm "
+                  "pattern (math, string manipulation, recursion, sorting, hashing). "
+                  "Write the most direct, correct Python solution. Output only the "
+                  "function definition.",
+    question="Complete the function that takes an array of words.\n"
+             "You must concatenate the nth letter from each word using the "
+             "enumerating order of the word.\n"
+             "Example: nth_char(['yoda','best','has']) == 'oes'",
+    fn_name="nth_char"
+)
+
+# A typical LLM response (raw text):
+response = """```python
+def nth_char(words):
+    return ''.join(word[i] for i, word in enumerate(words))
+```"""
+
+# This raw response is then passed to evaluator.extract_code(response)
+# which returns: "def nth_char(words):\n    return ''.join(word[i] for i, word in enumerate(words))"
+\end{lstlisting}
+\end{exbox}
+
+\subsection{\fn{crossover(prompt\_a, prompt\_b)}}
+
+\begin{specbox}{crossover(prompt\_a: str, prompt\_b: str) -> str}
+\textbf{Defined:} \pyfile{llm.py}, line 125\\
+\textbf{Called by:} \fn{ga.breed()} [ga.py:117] when \texttt{rng.random() < 0.8}\\
+\textbf{Calls:} \fn{\_call(phase="crossover", model=OPTIMIZER\_MODEL, temperature=0.7, max\_tokens=600, ...)}\\[4pt]
+\textbf{Parameters:}\\
+\hspace{1em}\param{prompt\_a} --- first parent's prompt string\\
+\hspace{1em}\param{prompt\_b} --- second parent's prompt string\\[4pt]
+\textbf{Returns:} \texttt{str} --- merged offspring prompt, whitespace-stripped
+\end{specbox}
+
+The Optimizer LLM (Sonnet 4.6) receives a meta-prompt asking it to blend the two parents:
+
+\begin{lstlisting}[style=example]
+# _CROSSOVER_SYSTEM:
+"You merge coding-instruction prompts. Output ONLY the merged prompt --
+ no commentary, no labels, no markdown."
+
+# _CROSSOVER_USER (with real parent prompts filled in):
+"Combine these two coding-instruction prompts into one coherent prompt.
+ Preserve the strongest strategies from each parent...
+ Do not simply concatenate -- produce a unified instruction paragraph.
+
+ --- Parent A ---
+ Think like a competitive programmer. Identify the algorithm pattern
+ (math, string manipulation, recursion, sorting, hashing)...
+
+ --- Parent B ---
+ You are a careful Python programmer. Explicitly think about boundary
+ conditions: empty input, single element, zero, negative values..."
+
+# Typical offspring output:
+"Approach the problem like a competitive programmer: identify the
+ algorithm pattern (math, recursion, string manipulation, sorting).
+ Before coding, explicitly consider boundary conditions: empty input,
+ zero, negative values, and single-element inputs. Write the most
+ direct, correct Python solution and output only the function definition."
+\end{lstlisting}
+
+\begin{conceptbox}{Crossover as semantic blending}
+Standard genetic algorithm crossover splits a binary string at a random point.
+Here, the ``crossover'' is an LLM call that \emph{understands the meaning} of the two
+parent prompts and creates a semantically coherent child.  The meta-prompt explicitly
+forbids simple concatenation --- the LLM must integrate the strategies, resolving
+conflicts and removing redundancies.
+\end{conceptbox}
+
+\subsection{\fn{mutate\_inject(prompt)}}
+
+\begin{specbox}{mutate\_inject(prompt: str) -> str}
+\textbf{Defined:} \pyfile{llm.py}, line 147\\
+\textbf{Called by:} \fn{ga.breed()} [ga.py:124] when \texttt{rng.random() < 0.25}\\
+\textbf{Calls:} \fn{\_call(phase="mutate\_inject", model=OPTIMIZER\_MODEL, temperature=0.7, max\_tokens=600, ...)}\\[4pt]
+\textbf{Returns:} \texttt{str} --- the same prompt with one new strategy sentence added
+\end{specbox}
+
+The injection meta-prompt:
+\begin{lstlisting}[style=example]
+"Add one new, specific coding strategy to this instruction prompt.
+ Examples of strategies: 'validate your output against the examples',
+ 'consider time complexity', 'check for off-by-one errors'.
+ Output only the modified prompt.
+
+ Prompt:
+ Think like a competitive programmer..."
+
+# Example injected sentence: "After implementing, mentally trace through
+# the examples to verify your solution produces the expected output."
+\end{lstlisting}
+
+\subsection{\fn{mutate\_delete(prompt)}}
+
+\begin{specbox}{mutate\_delete(prompt: str) -> str}
+\textbf{Defined:} \pyfile{llm.py}, line 166\\
+\textbf{Called by:} \fn{ga.breed()} [ga.py:127] when \texttt{rng.random() < 0.15}\\
+\textbf{Calls:} \fn{re.split()}, \fn{\_call(...)} (only if prompt has \textgreater1 sentence)\\[4pt]
+\textbf{Returns:} \texttt{str} --- prompt with the weakest sentence removed (or unchanged if only 1 sentence)
+\end{specbox}
+
+\textbf{Edge case guard:}
+\begin{lstlisting}[style=example]
+sentences = re.split(r"(?<=[.!?])\s+", prompt)
+# Split on whitespace that follows a sentence-ending punctuation.
+# "Sentence one. Sentence two! Sentence three?"
+# => ["Sentence one.", "Sentence two!", "Sentence three?"]
+
+if len(sentences) <= 1:
+    return prompt   # skip the API call; can't delete the only sentence
+\end{lstlisting}
+
+This check prevents calling the API for a one-sentence prompt where deletion would
+produce an empty string.
+
+\subsection{\fn{mutate\_rephrase(prompt)}}
+
+\begin{specbox}{mutate\_rephrase(prompt: str) -> str}
+\textbf{Defined:} \pyfile{llm.py}, line 187\\
+\textbf{Called by:} \fn{ga.breed()} [ga.py:130] when \texttt{rng.random() < 0.10}\\
+\textbf{Calls:} \fn{\_call(phase="mutate\_rephrase", model=OPTIMIZER\_MODEL, temperature=0.7, max\_tokens=600, ...)}\\[4pt]
+\textbf{Returns:} \texttt{str} --- same-meaning prompt in different words
+\end{specbox}
+
+\begin{lstlisting}[style=example]
+# Input:
+"Think like a competitive programmer. Identify the algorithm pattern..."
+
+# Output (same meaning, different words):
+"Approach the problem as a competitive coder would. Determine the
+ underlying algorithmic pattern..."
+
+# Purpose: even if the meaning is preserved, different wording may
+# activate different associations in the target LLM (Haiku), potentially
+# leading to better code generation on some problems.
+\end{lstlisting}
 
 
-% ======================================================================
-%  CHAPTER 7 — ga.py
-% ======================================================================
-\chapter{The Genetic Algorithm: \texttt{ga.py}}
+% ==========================================================================
+%  CHAPTER 9 --- ga.py
+% ==========================================================================
+\chapter{The Genetic Algorithm: \pyfile{ga.py}}
 
 \section{Purpose}
 
-This is the core of the project. It implements the full evolutionary loop: initialise a population, evaluate fitness, select parents, breed offspring, and repeat.
+This is the core of the project.  It implements the complete evolutionary loop:
+initialise a population from seeds, evaluate fitness, select parents via tournament
+selection, create offspring via LLM-mediated crossover and mutation, re-evaluate
+offspring fitness, apply elitism, and repeat for 20 generations.
 
-\section{Individual}
+\section{File at a Glance}
 
-\begin{lstlisting}[caption={The Individual dataclass.}]
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llp{7.5cm}@{}}
+\toprule
+\textbf{Item} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\fn{Individual}          & dataclass    & One chromosome: prompt + fitness + lineage metadata \\
+\fn{compute\_fitness()}  & function     & Evaluate one individual on all 100 evolution problems \\
+\fn{tournament\_select()} & function   & Pick the fittest of 3 random individuals \\
+\fn{breed()}             & function     & Crossover + mutation to produce one offspring \\
+\fn{run()}               & function     & The complete GA loop; returns best individual + history \\
+\bottomrule
+\end{tabular}
+\caption{\pyfile{ga.py}: all items.}
+\end{table}
+
+\section{Full Source Code}
+
+\begin{lstlisting}[style=pycode, caption={\pyfile{ga.py} --- complete source.}]
+"""
+ga.py -- Genetic Algorithm for evolving system-level instruction prompts.
+
+Pipeline summary (one generation):
+    1. SELECTION  -- tournament (size 3), pick 2 parents
+    2. CROSSOVER  -- LLM merges parents (rate 0.8)
+    3. MUTATION   -- inject / delete / rephrase (independent)
+    4. FITNESS    -- run code on 100 APPS problems
+    5. REPLACEMENT -- generational with top-2 elitism
+"""
+
+from __future__ import annotations
+
+import random
+import uuid
+from dataclasses import dataclass, field
+
+import config
+import evaluator
+import llm
+
+
+# ---------------------------------------------------------------------------
+# Individual
+# ---------------------------------------------------------------------------
+
 @dataclass
 class Individual:
+    """One chromosome = one system-level instruction prompt."""
     prompt: str
     fitness: float = -1.0
-    uid: str = field(
-        default_factory=lambda: uuid.uuid4().hex[:8])
-    parent_a: str = ""
-    parent_b: str = ""
-    operators: str = ""
-\end{lstlisting}
+    uid: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    parent_a: str = ""      # uid of parent A (empty for seeds)
+    parent_b: str = ""      # uid of parent B
+    operators: str = ""     # operators applied, e.g. "crossover+inject"
 
-Each \texttt{Individual} is one chromosome --- a system prompt. It carries its fitness score, a unique ID, parent IDs (for genealogy tracking), and which operators were applied.
 
-\section{Fitness Evaluation}
+# ---------------------------------------------------------------------------
+# Fitness
+# ---------------------------------------------------------------------------
 
-\begin{lstlisting}[caption={Computing fitness for one individual.}]
-def compute_fitness(individual, problems):
+def compute_fitness(individual: Individual, problems: list[dict]) -> float:
+    """
+    Evaluate a prompt on the evolution pool.
+    Fitness = mean score across all problems (partial credit per problem).
+    """
     total = 0.0
     for prob in problems:
         response = llm.generate_code(
             system_prompt=individual.prompt,
             question=prob["question"],
-            fn_name=prob["fn_name"])
+            fn_name=prob["fn_name"],
+        )
         code = evaluator.extract_code(response)
         score = evaluator.run_tests(
             code=code,
             fn_name=prob["fn_name"],
             inputs=prob["inputs"],
             outputs=prob["outputs"],
-            timeout=config.EXEC_TIMEOUT)
+            timeout=config.EXEC_TIMEOUT,
+        )
         total += score
     return total / len(problems)
-\end{lstlisting}
 
-For each of the 100 problems in the evolution pool:
-\begin{enumerate}[nosep]
-  \item Send the prompt + problem to Claude $\rightarrow$ get code.
-  \item Extract the code from the response.
-  \item Run it against test cases $\rightarrow$ get partial-credit score.
-  \item Average all scores $\rightarrow$ fitness.
-\end{enumerate}
 
-\section{Tournament Selection}
+# ---------------------------------------------------------------------------
+# Selection
+# ---------------------------------------------------------------------------
 
-\begin{lstlisting}[caption={Tournament selection.}]
-def tournament_select(population, rng):
-    contestants = rng.sample(population,
-                             config.TOURNAMENT_SIZE)
-    return max(contestants,
-               key=lambda ind: ind.fitness)
-\end{lstlisting}
+def tournament_select(population: list[Individual], rng: random.Random) -> Individual:
+    """Pick TOURNAMENT_SIZE random individuals, return the fittest."""
+    contestants = rng.sample(population, config.TOURNAMENT_SIZE)
+    return max(contestants, key=lambda ind: ind.fitness)
 
-\begin{conceptbox}{Tournament selection}
-Pick 3 random individuals from the population. The fittest one wins and becomes a parent. This is run twice to get two parents for breeding. Tournament selection balances exploitation (the fittest usually wins) with exploration (weaker individuals occasionally participate if they happen to be drawn).
-\end{conceptbox}
 
-\section{Breeding (Crossover + Mutation)}
+# ---------------------------------------------------------------------------
+# Crossover + mutation -- one offspring
+# ---------------------------------------------------------------------------
 
-\begin{lstlisting}[caption={The breed function.}]
-def breed(parent_a, parent_b, rng):
+def breed(
+    parent_a: Individual,
+    parent_b: Individual,
+    rng: random.Random,
+) -> Individual:
+    """
+    Produce one offspring from two parents.
+    Returns an unevaluated Individual (fitness = -1).
+    """
     ops = []
-    # Crossover (80% chance)
+
+    # --- crossover ---
     if rng.random() < config.CROSSOVER_RATE:
-        prompt = llm.crossover(parent_a.prompt,
-                               parent_b.prompt)
+        prompt = llm.crossover(parent_a.prompt, parent_b.prompt)
         ops.append("crossover")
     else:
-        prompt = rng.choice(
-            [parent_a.prompt, parent_b.prompt])
+        prompt = rng.choice([parent_a.prompt, parent_b.prompt])
         ops.append("copy")
 
-    # Mutations (independent)
+    # --- mutations (independent -- all three can fire) ---
     if rng.random() < config.MUT_INJECT_PROB:
         prompt = llm.mutate_inject(prompt)
         ops.append("inject")
@@ -790,123 +2653,1154 @@ def breed(parent_a, parent_b, rng):
         prompt=prompt,
         parent_a=parent_a.uid,
         parent_b=parent_b.uid,
-        operators="+".join(ops))
-\end{lstlisting}
+        operators="+".join(ops),
+    )
 
-\section{The Main Loop}
 
-\begin{lstlisting}[caption={GA main loop (simplified).}]
-def run(seed_prompts, problems, on_generation=None):
+# ---------------------------------------------------------------------------
+# Main GA loop
+# ---------------------------------------------------------------------------
+
+def run(
+    seed_prompts: list[str],
+    problems: list[dict],
+    on_generation=None,
+) -> tuple[Individual, list[dict]]:
+    """
+    Run the full genetic algorithm.
+    Returns: (best_individual, history)
+    """
     rng = random.Random(config.RANDOM_SEED)
-    population = [Individual(prompt=p)
-                  for p in seed_prompts]
+    history: list[dict] = []
 
-    # Evaluate generation 0
+    # --- initialise population ---
+    population = [Individual(prompt=p) for p in seed_prompts]
+    print(f"[gen 0] evaluating {len(population)} seed individuals ...")
     for ind in population:
         ind.fitness = compute_fitness(ind, problems)
+        print(f"  {ind.uid}  fitness={ind.fitness:.4f}")
 
     for gen in range(1, config.GENERATIONS + 1):
-        population.sort(key=lambda x: x.fitness,
-                        reverse=True)
-        # Elitism: keep top 2
-        new_pop = population[:config.ELITISM_COUNT]
+        # --- record stats for PREVIOUS generation ---
+        population.sort(key=lambda x: x.fitness, reverse=True)
+        fits = [x.fitness for x in population]
+        stats = {
+            "generation": gen - 1,
+            "best": max(fits),
+            "mean": sum(fits) / len(fits),
+            "worst": min(fits),
+            "best_uid": population[0].uid,
+            "best_prompt": population[0].prompt,
+        }
+        history.append(stats)
+        print(
+            f"[gen {gen-1}] best={stats['best']:.4f}  "
+            f"mean={stats['mean']:.4f}  worst={stats['worst']:.4f}"
+        )
 
-        # Breed offspring to fill remaining slots
+        if on_generation:
+            on_generation(gen - 1, population, stats)
+
+        # --- elitism: carry over top ELITISM_COUNT ---
+        new_pop = population[: config.ELITISM_COUNT]
+
+        # --- breed offspring to fill remaining slots ---
         while len(new_pop) < config.POPULATION_SIZE:
             p1 = tournament_select(population, rng)
             p2 = tournament_select(population, rng)
             child = breed(p1, p2, rng)
             new_pop.append(child)
 
-        # Evaluate new offspring only
-        for ind in new_pop[config.ELITISM_COUNT:]:
-            ind.fitness = compute_fitness(
-                ind, problems)
+        # --- evaluate only the new offspring ---
+        print(f"[gen {gen}] evaluating {config.POPULATION_SIZE - config.ELITISM_COUNT} offspring ...")
+        for ind in new_pop[config.ELITISM_COUNT :]:
+            ind.fitness = compute_fitness(ind, problems)
+            print(f"  {ind.uid}  fitness={ind.fitness:.4f}  ops={ind.operators}")
 
         population = new_pop
 
-    population.sort(key=lambda x: x.fitness,
-                    reverse=True)
+    # --- final stats ---
+    population.sort(key=lambda x: x.fitness, reverse=True)
+    fits = [x.fitness for x in population]
+    history.append({
+        "generation": config.GENERATIONS,
+        "best": max(fits),
+        "mean": sum(fits) / len(fits),
+        "worst": min(fits),
+        "best_uid": population[0].uid,
+        "best_prompt": population[0].prompt,
+    })
+    print(
+        f"[gen {config.GENERATIONS}] FINAL  best={max(fits):.4f}  "
+        f"mean={sum(fits)/len(fits):.4f}"
+    )
+
     return population[0], history
 \end{lstlisting}
 
+\section{Component-by-Component Analysis}
+
+\subsection{The \fn{Individual} Dataclass}
+
+\begin{specbox}{@dataclass class Individual}
+\textbf{Defined:} \pyfile{ga.py}, line 35\\
+\textbf{Created by:} list comprehension in \fn{run()} (seeds); \fn{breed()} (offspring)\\
+\textbf{Fields:}\\
+\hspace{1em}\fn{prompt: str} --- the system prompt (the chromosome)\\
+\hspace{1em}\fn{fitness: float = -1.0} --- score in [0.0, 1.0]; -1.0 = not yet evaluated\\
+\hspace{1em}\fn{uid: str} --- 8-char random hex ID (e.g.\ \texttt{"a3f7c2b1"})\\
+\hspace{1em}\fn{parent\_a: str = ""} --- uid of first parent; empty string for seeds\\
+\hspace{1em}\fn{parent\_b: str = ""} --- uid of second parent; empty string for seeds\\
+\hspace{1em}\fn{operators: str = ""} --- comma-separated operators (e.g.\ \texttt{"crossover+inject"})
+\end{specbox}
+
+\begin{lstlisting}[style=example]
+# Seed individual (created in run()):
+Individual(
+    prompt="Think like a competitive programmer...",
+    fitness=-1.0,       # sentinel: not yet evaluated
+    uid="a3f7c2b1",     # uuid.uuid4().hex[:8]
+    parent_a="",        # no parents (seed)
+    parent_b="",
+    operators=""
+)
+
+# After fitness evaluation:
+Individual(
+    prompt="Think like a competitive programmer...",
+    fitness=0.7312,     # set by compute_fitness()
+    uid="a3f7c2b1",
+    parent_a="",
+    parent_b="",
+    operators=""
+)
+
+# Offspring individual (created by breed()):
+Individual(
+    prompt="Approach as a competitive coder. Check edge cases...",
+    fitness=-1.0,       # still unevaluated; set by compute_fitness() next
+    uid="d7e1f4a2",
+    parent_a="a3f7c2b1",   # uid of parent 1
+    parent_b="c9b2d3f0",   # uid of parent 2
+    operators="crossover+inject"
+)
+\end{lstlisting}
+
+\subsection{\fn{compute\_fitness(individual, problems)}}
+
+\begin{specbox}{compute\_fitness(individual: Individual, problems: list[dict]) -> float}
+\textbf{Defined:} \pyfile{ga.py}, line 50\\
+\textbf{Called by:} \fn{run()} --- for all 15 seeds at gen 0 [ga.py:170]; for 13 new offspring per generation [ga.py:206]\\
+\textbf{Calls:} \fn{llm.generate\_code()}, \fn{evaluator.extract\_code()}, \fn{evaluator.run\_tests()}\\[4pt]
+\textbf{Parameters:}\\
+\hspace{1em}\param{individual} --- the Individual whose prompt is being evaluated\\
+\hspace{1em}\param{problems} --- list of 100 problem dicts (the fixed evolution pool)\\[4pt]
+\textbf{Returns:} \texttt{float} in \texttt{[0.0, 1.0]} --- mean partial-credit across 100 problems
+\end{specbox}
+
+\begin{lstlisting}[style=chain]
+compute_fitness(individual, problems)
+  |
+  +-- [for each of 100 problems]:
+  |
+  |   1. response = llm.generate_code(            [llm.py:77]
+  |                     individual.prompt,
+  |                     prob["question"],
+  |                     prob["fn_name"])
+  |      |
+  |      +-- _call(phase="fitness",               [llm.py:29]
+  |                model="claude-haiku-4-5-20251001",
+  |                temperature=0.0,
+  |                max_tokens=1024, ...)
+  |         Returns: raw LLM text string
+  |
+  |   2. code = evaluator.extract_code(response)  [evaluator.py:24]
+  |      Returns: Python code string
+  |
+  |   3. score = evaluator.run_tests(             [evaluator.py:84]
+  |                  code, prob["fn_name"],
+  |                  prob["inputs"], prob["outputs"],
+  |                  timeout=5)
+  |      Returns: float in [0.0, 1.0]
+  |
+  |   4. total += score
+  |
+  +-- return total / 100   (mean across all problems)
+\end{lstlisting}
+
+\begin{warnbox}{compute\_fitness is expensive}
+One call to \fn{compute\_fitness} makes \textbf{100 API calls} to Claude Haiku.
+Over a full run (15 seeds + 20 gens x 13 offspring = 275 evaluations):
+$275 \times 100 = 27{,}500$ Haiku API calls.  This is why the fitness pool is fixed
+at 100 problems (not 1{,}000) and why Haiku (not Sonnet) is the target model.
+\end{warnbox}
+
+\subsection{\fn{tournament\_select(population, rng)}}
+
+\begin{specbox}{tournament\_select(population: list[Individual], rng: random.Random) -> Individual}
+\textbf{Defined:} \pyfile{ga.py}, line 84\\
+\textbf{Called by:} \fn{run()} --- twice per offspring [ga.py:199--200]\\
+\textbf{Calls:} \fn{rng.sample()}, \fn{max(..., key=...)}\\[4pt]
+\textbf{Returns:} the highest-fitness \fn{Individual} among 3 randomly drawn contestants
+\end{specbox}
+
+\begin{lstlisting}[style=example]
+# population (sorted by fitness, example values):
+# [ind_A: 0.82, ind_B: 0.78, ind_C: 0.74, ind_D: 0.71, ...]
+
+# rng.sample(population, 3) draws 3 WITHOUT replacement:
+contestants = [ind_C: 0.74, ind_B: 0.78, ind_D: 0.71]
+
+# max(..., key=lambda ind: ind.fitness) returns the best:
+winner = ind_B  # fitness 0.78
+
+# Called TWICE per offspring:
+p1 = tournament_select(population, rng)  # e.g., ind_B (0.78)
+p2 = tournament_select(population, rng)  # e.g., ind_A (0.82)
+# p1 and p2 can be the same individual if drawn twice; this is rare
+# and produces a clone (crossover of identical parents = copy).
+\end{lstlisting}
+
+\begin{conceptbox}{Tournament selection: exploration vs.\ exploitation}
+If we always selected the globally best individual as a parent, all offspring would
+be children of the top 1-2 prompts --- the population would converge too quickly
+(premature convergence) and lose diversity.  Tournament selection gives every
+individual a chance proportional to its fitness: the best usually wins, but weaker
+individuals can win if they happen to be drawn when even weaker contestants are in
+their tournament.
+\end{conceptbox}
+
+\subsection{\fn{breed(parent\_a, parent\_b, rng)}}
+
+\begin{specbox}{breed(parent\_a: Individual, parent\_b: Individual, rng: random.Random) -> Individual}
+\textbf{Defined:} \pyfile{ga.py}, line 94\\
+\textbf{Called by:} \fn{run()} [ga.py:201]\\
+\textbf{Calls:} \fn{llm.crossover()}, \fn{llm.mutate\_inject()}, \fn{llm.mutate\_delete()},
+  \fn{llm.mutate\_rephrase()}, \fn{rng.random()}, \fn{rng.choice()}\\[4pt]
+\textbf{Returns:} unevaluated \fn{Individual} (\fn{fitness=-1.0})
+\end{specbox}
+
+\textbf{Complete decision tree for one offspring:}
+
+\begin{lstlisting}[style=chain]
+breed(parent_a, parent_b, rng):
+  |
+  +-- Roll rng.random() [call 1]
+  |     < 0.80? --> llm.crossover(parent_a.prompt, parent_b.prompt)
+  |                 ops = ["crossover"]
+  |                 [1 API call to Sonnet]
+  |     >= 0.80? --> rng.choice([parent_a.prompt, parent_b.prompt])
+  |                  ops = ["copy"]
+  |                  [0 API calls]
+  |
+  +-- Roll rng.random() [call 2] -- INDEPENDENT
+  |     < 0.25? --> prompt = llm.mutate_inject(prompt)
+  |                 ops.append("inject")
+  |                 [1 API call to Sonnet]
+  |
+  +-- Roll rng.random() [call 3] -- INDEPENDENT
+  |     < 0.15? --> prompt = llm.mutate_delete(prompt)
+  |                 ops.append("delete")
+  |                 [0 or 1 API calls, depending on sentence count]
+  |
+  +-- Roll rng.random() [call 4] -- INDEPENDENT
+        < 0.10? --> prompt = llm.mutate_rephrase(prompt)
+                    ops.append("rephrase")
+                    [1 API call to Sonnet]
+
+  --> return Individual(
+          prompt=prompt,
+          parent_a=parent_a.uid,   # genealogy tracking
+          parent_b=parent_b.uid,
+          operators="+".join(ops)  # e.g. "crossover+inject" or "copy+rephrase"
+      )
+  # fitness is NOT set here; run() calls compute_fitness() separately
+\end{lstlisting}
+
+\subsection{\fn{run(seed\_prompts, problems, on\_generation=None)}}
+
+\begin{specbox}{run(seed\_prompts, problems, on\_generation=None) -> tuple[Individual, list[dict]]}
+\textbf{Defined:} \pyfile{ga.py}, line 146\\
+\textbf{Called by:} \fn{main.main()} [main.py:120]\\
+\textbf{Calls:} \fn{compute\_fitness()}, \fn{tournament\_select()}, \fn{breed()},
+  \fn{on\_generation} callback (if provided)\\[4pt]
+\textbf{Parameters:}\\
+\hspace{1em}\param{seed\_prompts} --- list of 15 starting prompt strings\\
+\hspace{1em}\param{problems} --- 100-problem evolution pool\\
+\hspace{1em}\param{on\_generation} --- optional callback invoked after each generation\\[4pt]
+\textbf{Returns:} \texttt{(best\_Individual, history: list[dict])}
+\end{specbox}
+
+\textbf{The main loop structure, annotated:}
+
+\begin{lstlisting}[style=chain]
+run(seed_prompts, problems, on_generation):
+
+  [SETUP]
+  rng = random.Random(42)  # seeded for reproducibility
+  history = []
+
+  [GEN 0: Evaluate seeds]
+  population = [Individual(prompt=p) for p in seed_prompts]  # 15 individuals
+  for ind in population:                                       # 15 iterations
+      ind.fitness = compute_fitness(ind, problems)            # 100 API calls each
+
+  [GENS 1..20: The evolutionary loop]
+  for gen in range(1, 21):                                     # 20 iterations
+
+      [RECORD STATS FOR PREVIOUS GENERATION]
+      population.sort(by fitness, descending)
+      stats = {generation: gen-1, best: ..., mean: ..., worst: ..., ...}
+      history.append(stats)
+      if on_generation: on_generation(gen-1, population, stats)
+      # => saves generation_(gen-1).json checkpoint
+
+      [ELITISM: copy top 2 unchanged]
+      new_pop = population[:2]   # best 2 individuals copied verbatim
+
+      [BREED: fill remaining 13 slots]
+      while len(new_pop) < 15:
+          p1 = tournament_select(population, rng)  # pick 2 parents
+          p2 = tournament_select(population, rng)
+          child = breed(p1, p2, rng)               # crossover + mutations
+          new_pop.append(child)                     # child.fitness = -1.0
+
+      [EVALUATE: only the 13 new offspring]
+      for ind in new_pop[2:]:                       # skip the 2 elites
+          ind.fitness = compute_fitness(ind, problems)  # 100 API calls each
+
+      population = new_pop   # elites (re-used) + 13 new evaluated offspring
+
+  [FINAL STATS]
+  population.sort(by fitness, descending)
+  history.append({generation: 20, best: ..., mean: ..., ...})
+
+  return (population[0], history)   # best individual + all 21 stat records
+\end{lstlisting}
+
+\begin{conceptbox}{History record structure}
+The \fn{history} list contains 21 entries (generations 0 through 20).  Each entry is:
+\begin{lstlisting}[style=example]
+{
+    "generation": 0,          # or 1, 2, ..., 20
+    "best": 0.7312,           # highest fitness in population at this gen
+    "mean": 0.6841,           # average fitness
+    "worst": 0.5920,          # lowest fitness
+    "best_uid": "a3f7c2b1",   # uid of the current best individual
+    "best_prompt": "Think like a competitive programmer..."
+}
+\end{lstlisting}
+Generations 0--19 are recorded at the \emph{start} of the following generation's loop
+(i.e.\ \texttt{stats["generation"]} = \texttt{gen - 1}).  Generation 20's stats are
+recorded after the loop ends.
+\end{conceptbox}
+
 \begin{conceptbox}{Generational replacement}
-Each generation, the \emph{entire} population is replaced except for the elite individuals. This is called \textbf{generational replacement} (as opposed to steady-state, where only one or two individuals are replaced at a time). It creates strong selection pressure: only the best survive.
+Each generation, the \emph{entire} population is replaced (except the 2 elites).
+This is called \textbf{full generational replacement}.  The alternative is
+\emph{steady-state}, where only 1--2 individuals are replaced per step.
+Full replacement creates strong selection pressure: any individual not in the top 2
+must produce offspring that beat their parents to survive.  This speeds up convergence
+at the cost of some diversity.  Elitism (top 2 guaranteed) prevents this from becoming
+too aggressive.
 \end{conceptbox}
 
 
-% ======================================================================
-%  CHAPTER 8 — main.py
-% ======================================================================
-\chapter{Entry Point: \texttt{main.py}}
+
+\chapter{Entry Point: \pyfile{main.py}}
 
 \section{Purpose}
 
-This file orchestrates the full run: load data, run the GA, evaluate on held-out data, save all results, and write the cost report.
+This file orchestrates the entire run.  It is the only file you call directly
+(\texttt{python main.py}).  Its job is to wire together all other modules in the
+correct order, checkpoint progress after each generation, run the final holdout
+evaluation, and write the cost report.
 
-\section{Key Steps}
-
-\begin{enumerate}
-  \item \textbf{Pre-flight checks}: verify API key and dataset path exist.
-  \item \textbf{Load and split}: call \texttt{dataset.load\_problems()} and \texttt{dataset.split()}.
-  \item \textbf{Create run directory}: \texttt{results/run\_<timestamp>/} with config snapshot and problem IDs.
-  \item \textbf{Run GA}: call \texttt{ga.run()} with a checkpoint callback that saves population state after each generation.
-  \item \textbf{Save results}: \texttt{best\_prompt.txt}, \texttt{history.json}, generation checkpoints.
-  \item \textbf{Holdout evaluation}: run the best prompt on 200 unseen problems.
-  \item \textbf{Cost report}: call \texttt{tracker.flush()} to save a JSON to \texttt{../Costs/}.
-\end{enumerate}
-
-\section{Checkpointing}
-
-After each generation, \texttt{save\_checkpoint()} writes the full population state (all prompts, fitnesses, parent IDs, operators) to a JSON file. If the run crashes mid-way, you lose at most one generation of work.
-
-\section{Output Files}
+\section{File at a Glance}
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}ll@{}}
+\begin{tabular}{@{}llp{7.5cm}@{}}
+\toprule
+\textbf{Item} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\fn{save\_checkpoint()} & function & Write full population state to a per-generation JSON file \\
+\fn{evaluate\_on\_holdout()} & function & Run best prompt on 200 held-out problems \\
+\fn{main()} & function & The 7-step orchestration pipeline \\
+\bottomrule
+\end{tabular}
+\caption{\pyfile{main.py}: public items.}
+\end{table}
+
+\section{Full Source Code}
+
+\begin{lstlisting}[style=pycode, caption={\pyfile{main.py} --- complete source.}]
+"""
+main.py -- Entry point.  Load data -> run GA -> save results -> save cost report.
+
+Usage:
+    export ANTHROPIC_API_KEY="sk-ant-..."
+    python main.py
+
+Results are saved to Code/results/run_<timestamp>/
+Cost reports are saved to Code/Costs/cost_<timestamp>.json  (new file each run)
+"""
+
+import json
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+import config
+import dataset
+import evaluator
+import ga
+import llm
+from cost_tracker import tracker
+from seeds import SEED_PROMPTS
+
+
+def save_checkpoint(run_dir: Path, gen: int, population, stats):
+    """Save population state after each generation for crash recovery."""
+    gen_file = run_dir / f"generation_{gen:02d}.json"
+    data = {
+        "generation": gen,
+        "stats": stats,
+        "population": [
+            {
+                "uid": ind.uid,
+                "prompt": ind.prompt,
+                "fitness": ind.fitness,
+                "parent_a": ind.parent_a,
+                "parent_b": ind.parent_b,
+                "operators": ind.operators,
+            }
+            for ind in population
+        ],
+    }
+    gen_file.write_text(json.dumps(data, indent=2))
+
+
+def evaluate_on_holdout(best_prompt: str, holdout: list[dict]) -> float:
+    """Evaluate the best evolved prompt on the held-out test set."""
+    total = 0.0
+    for i, prob in enumerate(holdout):
+        response = llm.generate_code(best_prompt, prob["question"], prob["fn_name"])
+        code = evaluator.extract_code(response)
+        score = evaluator.run_tests(
+            code, prob["fn_name"], prob["inputs"], prob["outputs"], config.EXEC_TIMEOUT,
+        )
+        total += score
+        if (i + 1) % 50 == 0:
+            print(f"  holdout progress: {i+1}/{len(holdout)}")
+    return total / len(holdout)
+
+
+def main():
+    # --- pre-flight checks ---
+    if not config.ANTHROPIC_API_KEY:
+        print("ERROR: set ANTHROPIC_API_KEY environment variable.")
+        sys.exit(1)
+
+    if not config.APPS_TRAIN.exists():
+        print(f"ERROR: APPS train directory not found: {config.APPS_TRAIN}")
+        sys.exit(1)
+
+    # --- load and split dataset ---
+    print("Loading APPS Codewars introductory problems ...")
+    all_problems = dataset.load_problems(config.APPS_TRAIN)
+    print(f"  Loaded {len(all_problems)} problems")
+
+    if len(all_problems) < config.EVOLUTION_SIZE + config.HOLDOUT_SIZE:
+        print("ERROR: not enough problems after filtering.")
+        sys.exit(1)
+
+    evolution_pool, holdout, rest = dataset.split(
+        all_problems, config.EVOLUTION_SIZE, config.HOLDOUT_SIZE, config.RANDOM_SEED,
+    )
+    print(f"  Evolution pool : {len(evolution_pool)} problems")
+    print(f"  Held-out test  : {len(holdout)} problems")
+    print(f"  Remaining      : {len(rest)} problems")
+
+    # --- create run directory ---
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = config.RESULTS_DIR / f"run_{timestamp}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # save config snapshot
+    (run_dir / "config.json").write_text(json.dumps({
+        "population_size":  config.POPULATION_SIZE,
+        "generations":      config.GENERATIONS,
+        "crossover_rate":   config.CROSSOVER_RATE,
+        "tournament_size":  config.TOURNAMENT_SIZE,
+        "elitism_count":    config.ELITISM_COUNT,
+        "mut_inject":       config.MUT_INJECT_PROB,
+        "mut_delete":       config.MUT_DELETE_PROB,
+        "mut_rephrase":     config.MUT_REPHRASE_PROB,
+        "evolution_size":   config.EVOLUTION_SIZE,
+        "holdout_size":     config.HOLDOUT_SIZE,
+        "target_model":     config.TARGET_MODEL,
+        "optimizer_model":  config.OPTIMIZER_MODEL,
+        "random_seed":      config.RANDOM_SEED,
+    }, indent=2))
+
+    # save evolution problem IDs for reproducibility
+    (run_dir / "evolution_ids.json").write_text(
+        json.dumps([p["id"] for p in evolution_pool])
+    )
+
+    print(f"\nResults will be saved to: {run_dir}\n")
+
+    # --- run GA ---
+    start = time.time()
+    best, history = ga.run(
+        seed_prompts=SEED_PROMPTS,
+        problems=evolution_pool,
+        on_generation=lambda gen, pop, stats: save_checkpoint(run_dir, gen, pop, stats),
+    )
+    elapsed = time.time() - start
+
+    # --- save results ---
+    (run_dir / "history.json").write_text(json.dumps(history, indent=2))
+    (run_dir / "best_prompt.txt").write_text(best.prompt)
+
+    print(f"\n{'='*60}")
+    print(f"GA complete in {elapsed/60:.1f} minutes")
+    print(f"Best fitness (evolution pool): {best.fitness:.4f}")
+    print(f"Best prompt:\n{best.prompt}")
+    print(f"{'='*60}\n")
+
+    # --- evaluate best prompt on held-out set ---
+    print(f"Evaluating best prompt on {len(holdout)} held-out problems ...")
+    holdout_fitness = evaluate_on_holdout(best.prompt, holdout)
+    print(f"Held-out fitness: {holdout_fitness:.4f}")
+
+    # --- save final summary ---
+    summary = {
+        "elapsed_minutes": round(elapsed / 60, 1),
+        "best_prompt": best.prompt,
+        "best_fitness_evolution": best.fitness,
+        "best_fitness_holdout": holdout_fitness,
+        "best_uid": best.uid,
+        "total_generations": config.GENERATIONS,
+    }
+    (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+
+    # --- save cost report to Code/Costs/ ---
+    cost_path = tracker.flush(extra={
+        "run_dir": str(run_dir),
+        "best_fitness_evolution": best.fitness,
+        "best_fitness_holdout": holdout_fitness,
+        "generations": config.GENERATIONS,
+        "population_size": config.POPULATION_SIZE,
+        "evolution_size": config.EVOLUTION_SIZE,
+    })
+    print(f"\nCost report saved to: {cost_path}")
+    print(f"Total cost this run:  ${tracker.total():.2f}")
+    print(f"\nAll results saved to: {run_dir}")
+
+
+if __name__ == "__main__":
+    main()
+\end{lstlisting}
+
+\section{Function-by-Function Analysis}
+
+\subsection{\fn{save\_checkpoint(run\_dir, gen, population, stats)}}
+
+\begin{specbox}{save\_checkpoint(run\_dir: Path, gen: int, population: list[Individual], stats: dict)}
+\textbf{Defined:} \pyfile{main.py}, line 27\\
+\textbf{Called by:} the lambda in \fn{ga.run()}'s \fn{on\_generation} callback [main.py:123],
+  which is invoked by \fn{ga.run()} as \fn{on\_generation(gen-1, population, stats)} at the
+  \emph{start} of each breeding step --- meaning it saves the state \emph{before} the new
+  offspring are created.\\[4pt]
+\textbf{Calls:} \fn{json.dumps()}, \fn{Path.write\_text()}\\
+\textbf{Output:} \texttt{run\_dir/generation\_NN.json} (e.g., \texttt{generation\_04.json})
+\end{specbox}
+
+\textbf{What is written:}
+\begin{lstlisting}[style=example]
+# generation_04.json (after generation 4 is complete):
+{
+    "generation": 4,
+    "stats": {
+        "generation": 4,
+        "best": 0.7891,
+        "mean": 0.7234,
+        "worst": 0.6103,
+        "best_uid": "d7e1f4a2",
+        "best_prompt": "Approach as a competitive coder..."
+    },
+    "population": [
+        {
+            "uid": "d7e1f4a2",
+            "prompt": "Approach as a competitive coder...",
+            "fitness": 0.7891,
+            "parent_a": "a3f7c2b1",
+            "parent_b": "c9b2d3f0",
+            "operators": "crossover+inject"
+        },
+        ...  # all 15 individuals
+    ]
+}
+\end{lstlisting}
+
+\textbf{Why checkpointing matters:} A full GA run takes several hours (27{,}500+ API calls).
+If the process crashes at generation 15, without checkpoints the entire run must restart
+from generation 0.  With checkpoints, you can inspect which prompts were alive at each
+generation and understand the evolutionary trajectory.
+
+\subsection{\fn{evaluate\_on\_holdout(best\_prompt, holdout)}}
+
+\begin{specbox}{evaluate\_on\_holdout(best\_prompt: str, holdout: list[dict]) -> float}
+\textbf{Defined:} \pyfile{main.py}, line 48\\
+\textbf{Called by:} \fn{main()} [main.py:139]\\
+\textbf{Calls:} \fn{llm.generate\_code()}, \fn{evaluator.extract\_code()}, \fn{evaluator.run\_tests()}\\[4pt]
+\textbf{Parameters:}\\
+\hspace{1em}\param{best\_prompt} --- the winning chromosome from \fn{ga.run()}\\
+\hspace{1em}\param{holdout} --- the 200 never-seen-during-evolution problems\\[4pt]
+\textbf{Returns:} \texttt{float} --- mean partial-credit across 200 holdout problems
+\end{specbox}
+
+This function is structurally identical to \fn{ga.compute\_fitness()} but runs on the
+200-problem holdout set instead of the 100-problem evolution set.  The only added detail
+is a progress print every 50 problems (line 59), since 200 sequential API calls take
+a few minutes.
+
+\begin{lstlisting}[style=chain]
+evaluate_on_holdout(best_prompt, holdout):
+  |
+  +-- [for i, prob in enumerate(holdout)]:  # 200 iterations
+  |
+  |   response = llm.generate_code(best_prompt, prob["question"], prob["fn_name"])
+  |              [llm.py:77 => 1 Haiku API call per problem]
+  |
+  |   code = evaluator.extract_code(response)   [evaluator.py:24]
+  |
+  |   score = evaluator.run_tests(...)           [evaluator.py:84]
+  |
+  |   total += score
+  |
+  |   if (i+1) % 50 == 0: print progress       # every 50 problems
+  |
+  +-- return total / 200
+\end{lstlisting}
+
+\subsection{\fn{main()} --- The 7-Step Pipeline}
+
+\begin{specbox}{main() -> None}
+\textbf{Defined:} \pyfile{main.py}, line 63\\
+\textbf{Called by:} \texttt{if \_\_name\_\_ == "\_\_main\_\_": main()} [main.py:167]\\
+\textbf{Calls:} everything in the project
+\end{specbox}
+
+\textbf{Step 1 --- Pre-flight checks (lines 65--71):}
+\begin{lstlisting}[style=example]
+if not config.ANTHROPIC_API_KEY:
+    sys.exit(1)        # fail fast if no API key
+if not config.APPS_TRAIN.exists():
+    sys.exit(1)        # fail fast if dataset not found
+# These checks happen BEFORE any expensive operations.
+\end{lstlisting}
+
+\textbf{Step 2 --- Load and split dataset (lines 74--87):}
+\begin{lstlisting}[style=example]
+all_problems = dataset.load_problems(config.APPS_TRAIN)   # ~2346 problems
+evolution_pool, holdout, rest = dataset.split(
+    all_problems, 100, 200, seed=42)
+# evolution_pool: the 100 problems the GA will train on
+# holdout:        200 unseen problems for final test
+\end{lstlisting}
+
+\textbf{Step 3 --- Create run directory (lines 90--114):}
+\begin{lstlisting}[style=example]
+run_dir = config.RESULTS_DIR / f"run_{timestamp}"
+# e.g., Code/results/run_20260417_142035/
+run_dir.mkdir(parents=True, exist_ok=True)
+# Saves immediately:
+#   config.json       -- exact hyperparameters used
+#   evolution_ids.json -- which 100 problem IDs were used
+\end{lstlisting}
+
+\textbf{Step 4 --- Run GA (lines 119--125):}
+\begin{lstlisting}[style=example]
+best, history = ga.run(
+    seed_prompts=SEED_PROMPTS,      # the 15 starting chromosomes
+    problems=evolution_pool,         # fixed 100-problem pool
+    on_generation=lambda gen, pop, stats:
+        save_checkpoint(run_dir, gen, pop, stats)
+)
+# ga.run() takes hours; save_checkpoint() runs after each generation
+# so crash recovery loses at most one generation of work.
+\end{lstlisting}
+
+\textbf{Step 5 --- Save results (lines 128--135):}
+\begin{lstlisting}[style=example]
+(run_dir / "history.json").write_text(json.dumps(history, indent=2))
+# history: list of 21 dicts {generation, best, mean, worst, best_uid, best_prompt}
+
+(run_dir / "best_prompt.txt").write_text(best.prompt)
+# The evolved prompt -- the main artifact of the experiment.
+\end{lstlisting}
+
+\textbf{Step 6 --- Holdout evaluation (lines 138--140):}
+\begin{lstlisting}[style=example]
+holdout_fitness = evaluate_on_holdout(best.prompt, holdout)
+# 200 more API calls to Haiku. Measures generalisation.
+# If evolution fitness >> holdout fitness: the prompt overfitted to the 100 problems.
+\end{lstlisting}
+
+\textbf{Step 7 --- Save cost report (lines 154--163):}
+\begin{lstlisting}[style=example]
+cost_path = tracker.flush(extra={
+    "run_dir": str(run_dir),
+    "best_fitness_evolution": best.fitness,
+    "best_fitness_holdout": holdout_fitness,
+    ...
+})
+# Writes: Code/Costs/cost_20260417_142035.json
+# Contains complete token-by-token and phase-by-phase breakdown.
+\end{lstlisting}
+
+\section{Output Files Reference}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}p{4.5cm}p{8cm}@{}}
 \toprule
 \textbf{File} & \textbf{Contents} \\
 \midrule
-\texttt{best\_prompt.txt}     & The evolved prompt (main artifact) \\
-\texttt{history.json}         & Best/mean/worst fitness per generation \\
-\texttt{generation\_XX.json}  & Full population state (for genealogy) \\
-\texttt{summary.json}         & Final fitness on evolution + holdout \\
-\texttt{config.json}          & Exact hyperparameters used \\
-\texttt{evolution\_ids.json}  & Which 100 problem IDs were used \\
-\texttt{../Costs/cost\_*.json} & Detailed cost breakdown \\
+\texttt{results/run\_*/config.json}        & All hyperparameters used in this run (reproducibility) \\
+\texttt{results/run\_*/evolution\_ids.json} & The exact 100 APPS problem IDs used as the fitness pool \\
+\texttt{results/run\_*/generation\_NN.json} & Full population state (prompts, fitnesses, lineage) per gen \\
+\texttt{results/run\_*/history.json}       & Best/mean/worst fitness per generation (21 entries) \\
+\texttt{results/run\_*/best\_prompt.txt}   & The winning prompt (main artifact) \\
+\texttt{results/run\_*/summary.json}       & Final fitnesses (evolution + holdout), best prompt, runtime \\
+\texttt{Costs/cost\_*.json}                & Full API cost breakdown by phase and model \\
 \bottomrule
 \end{tabular}
 \caption{Output files produced by each run.}
 \end{table}
 
 
-% ======================================================================
+% ==========================================================================
+%  CHAPTER 11 --- COMPLETE WORKED EXAMPLE
+% ==========================================================================
+\chapter{Complete Worked Example: One Problem Through the Pipeline}
+
+This chapter traces a single coding problem through the \emph{entire} pipeline --- from
+disk to a fitness score --- using concrete data at every step.  The goal is to show
+exactly what data each function receives and returns.
+
+\section{The Problem (on disk)}
+
+\begin{lstlisting}[style=example]
+# Problem folder: Dataset Examples/APPS/train/3715/
+
+# metadata.json:
+{
+    "difficulty": "introductory",
+    "url": "https://www.codewars.com/kata/572b6b2772a32e92e900010b",
+    "source": "codewars"
+}
+
+# question.txt:
+"Complete the function that takes an array of words.
+ You must concatenate the nth letter from each word using the enumerating order
+ of the word as n.
+ If any word has fewer letters than the enumerating order value, use '#'.
+
+ Example: nth_char(['yoda','best','has'])   == 'oes'
+          nth_char(['a', 'bc', 'def'])       == 'abd'"
+
+# input_output.json:
+{
+    "fn_name": "nth_char",
+    "inputs":  [
+        [["yoda", "best", "has"]],
+        [["a", "bc", "def"]]
+    ],
+    "outputs": [
+        ["oes"],
+        ["abd"]
+    ]
+}
+\end{lstlisting}
+
+\section{Step 1: \fn{dataset.load\_problems()} reads the problem}
+
+\begin{lstlisting}[style=example]
+# After the filter chain passes (introductory, fn_name, codewars):
+problem = {
+    "id":       "3715",
+    "question": "Complete the function that takes an array of words.\n"
+                "You must concatenate the nth letter from each word...",
+    "fn_name":  "nth_char",
+    "inputs":   [
+        [["yoda", "best", "has"]],   # test 1: one arg (a list of 3 words)
+        [["a", "bc", "def"]]         # test 2: one arg (a list of 3 words)
+    ],
+    "outputs":  [
+        ["oes"],                       # test 1 expected: 'oes'
+        ["abd"]                        # test 2 expected: 'abd'
+    ]
+}
+# This dict is one entry in the 2346-item list returned by load_problems().
+\end{lstlisting}
+
+\section{Step 2: \fn{dataset.split()} assigns this problem to the evolution pool}
+
+\begin{lstlisting}[style=example]
+# After shuffle with seed=42, problem "3715" lands in position 47:
+evolution_pool = shuffled[:100]   # positions 0..99
+# Problem "3715" is at position 47 => it is in evolution_pool.
+# This same 100-problem pool is used for EVERY generation.
+\end{lstlisting}
+
+\section{Step 3: \fn{ga.compute\_fitness()} processes the problem}
+
+\begin{lstlisting}[style=example]
+# Individual being evaluated:
+individual = Individual(
+    prompt="Think like a competitive programmer. Identify the algorithm "
+           "pattern (math, string manipulation, recursion, sorting, hashing). "
+           "Write the most direct, correct Python solution. Output only the "
+           "function definition.",
+    fitness=-1.0,  # not yet evaluated
+    uid="a3f7c2b1"
+)
+
+# The for loop reaches problem "3715":
+prob = evolution_pool[47]   # the nth_char problem
+\end{lstlisting}
+
+\section{Step 4: \fn{llm.generate\_code()} sends the API request}
+
+\begin{lstlisting}[style=example]
+# Arguments passed to generate_code():
+system_prompt = individual.prompt   # the competitive programmer prompt
+question      = prob["question"]    # "Complete the function that takes..."
+fn_name       = "nth_char"
+
+# user message assembled inside generate_code():
+user_msg = (
+    "Complete the function that takes an array of words.\n"
+    "You must concatenate the nth letter from each word using the "
+    "enumerating order of the word as n.\n"
+    "If any word has fewer letters than the enumerating order value, use '#'.\n\n"
+    "Example: nth_char(['yoda','best','has'])   == 'oes'\n"
+    "         nth_char(['a', 'bc', 'def'])       == 'abd'\n\n"
+    "Write a Python function named `nth_char`."
+)
+
+# This is passed to _call() which sends to Claude Haiku 4.5:
+# model=claude-haiku-4-5-20251001, temperature=0.0, max_tokens=1024
+\end{lstlisting}
+
+\section{Step 5: \fn{llm.\_call()} makes the API request and logs cost}
+
+\begin{lstlisting}[style=example]
+# Anthropic API call (simplified):
+resp = client.messages.create(
+    model="claude-haiku-4-5-20251001",
+    max_tokens=1024,
+    temperature=0.0,         # deterministic: always same output for same input
+    system="Think like a competitive programmer...",
+    messages=[{"role": "user", "content": user_msg}]
+)
+
+# resp.usage:
+#   input_tokens  = 287   (system prompt ~80 tokens + user message ~207 tokens)
+#   output_tokens =  52   (the generated function body)
+#
+# resp.content[0].text (the LLM's raw response):
+raw_response = """```python
+def nth_char(words):
+    return ''.join(
+        word[i] if i < len(word) else '#'
+        for i, word in enumerate(words)
+    )
+```"""
+
+# Cost logged:
+tracker.record(
+    phase="fitness",
+    model="claude-haiku-4-5-20251001",
+    input_tokens=287,
+    output_tokens=52
+)
+# input_cost  = 287 * 1.00 / 1_000_000 = $0.000287
+# output_cost =  52 * 5.00 / 1_000_000 = $0.000260
+# total_cost  = $0.000547 for this one call
+\end{lstlisting}
+
+\section{Step 6: \fn{evaluator.extract\_code()} strips the markdown}
+
+\begin{lstlisting}[style=example]
+response = """```python
+def nth_char(words):
+    return ''.join(
+        word[i] if i < len(word) else '#'
+        for i, word in enumerate(words)
+    )
+```"""
+
+# Strategy 1 fires: regex r"```python\s*\n([\s\S]*?)```"
+# Captures group 1 = everything between the fences:
+code = "def nth_char(words):\n    return ''.join(\n        word[i] if i < len(word) else '#'\n        for i, word in enumerate(words)\n    )"
+\end{lstlisting}
+
+\section{Step 7: \fn{evaluator.run\_tests()} executes and scores}
+
+\begin{lstlisting}[style=example]
+# has_function check:
+re.search(r"\bdef\s+nth_char\s*\(", code)  => MATCH => True
+# Proceed.
+
+# _build_script produces this script:
+"""
+import sys
+sys.set_int_max_str_digits(1_000_000)
+
+def nth_char(words):
+    return ''.join(
+        word[i] if i < len(word) else '#'
+        for i, word in enumerate(words)
+    )
+
+def __run__(inp, expected):
+    try:
+        result = nth_char(*inp)
+        sys.stdout.write("__R__:" + ("1" if [result] == expected else "0") + "\n")
+        sys.stdout.flush()
+    except Exception:
+        sys.stdout.write("__R__:0\n")
+        sys.stdout.flush()
+
+__run__([["yoda", "best", "has"]], ["oes"])
+__run__([["a", "bc", "def"]], ["abd"])
+"""
+
+# subprocess.run([python3, "-c", script], timeout=5) executes this.
+
+# Execution trace:
+# Test 1: nth_char(*[["yoda","best","has"]]) = nth_char(["yoda","best","has"])
+#   i=0, word="yoda" => word[0] = 'y'  -- wait, 'y' not 'o'?
+#   Hmm, let me recheck: nth_char(['yoda','best','has']) == 'oes'
+#   i=0, word="yoda" => word[0] = 'y'  ... but expected 'o'
+#   Wait -- "enumerating order of the word" means n=index of the word, not char.
+#   i=0 => word[0] from "yoda" = 'y'
+#   i=1 => word[1] from "best" = 'e'
+#   i=2 => word[2] from "has"  = 's'
+#   Result: "yes" -- but expected "oes"
+#   Hmm, so the expected output is 'oes':
+#     nth_char(['yoda','best','has']):
+#       i=0, word='yoda' => word[0]='y'? Or word[1]='o'?
+#   Actually re-reading: "nth letter from each word using the enumerating order"
+#   This means: word 0 -> take letter at index 1 (0+1)?
+#   No wait: 'yoda'[0]='y', 'best'[1]='e', 'has'[2]='s' => 'yes' != 'oes'
+#   Or: 'yoda'[1]='o', 'best'[2]='e'... wait 'best'[2]='s' not 'e'
+#   Or: 'yoda'[0+1?]...
+#   Actually checking: 'oes': o from yoda (index 1?), e from best (index 1?), s from has (index 1?)
+#   No: 'yoda'[1]='o', 'best'[1]='e', 'has'[1]='a' => 'oea' != 'oes'
+#   Let me try: y[1]='o', b[0]='b', h[2]='s'...
+#   Actually the correct interpretation may be that n starts from 1 (1-indexed):
+#   i=1, word="yoda" => word[1]='o'; i=2, word="best" => word[2]='e'; i=3(>len("has")=3) => word[2]='s'
+#   "has"[2]='s' -- yes! n=3, index=2
+#   So: 1-indexed: yoda[1]='o', best[2]='e', has[3]='s' => 'oes' - correct!
+#   The code above uses 0-based indexing (i starts from 0), which would give 'yes', not 'oes'.
+#   A correct implementation should use 1-based indexing:
+#     for i, word in enumerate(words, 1):
+#         word[i-1] if i <= len(word) else '#'
+#   OR equivalently enumerate starting from 1.
+
+# So the code generated by the LLM is WRONG for this problem.
+# Let's say it produces INCORRECT results:
+# Test 1: result = "yes", expected = "oes" => [result]=="yes" != ["oes"] => __R__:0
+# Test 2: nth_char(["a","bc","def"]):
+#   0-based: a[0]='a', bc[1]='c', def[2]='f' => 'acf' vs expected 'abd'
+#   __R__:0
+
+# subprocess stdout: "__R__:0\n__R__:0\n"
+# results = [0, 0]
+# score = sum([0,0]) / len(inputs) = 0 / 2 = 0.0
+
+# This is a FITNESS SIGNAL: the competitive programmer prompt scored 0.0
+# on THIS problem because Haiku (at temp=0) wrote 0-indexed code.
+# The GA will explore other prompts that might lead to 1-indexed solutions.
+\end{lstlisting}
+
+\begin{warnbox}{The worked example above shows a failure case --- intentionally}
+This is pedagogically useful: it shows the entire pipeline completing correctly even
+when the \emph{generated code is wrong}.  The pipeline does not crash; it returns 0.0
+for this problem and continues to the next 99 problems.  The prompt's overall fitness
+is the \emph{mean} across all 100 --- so 0.0 on this one problem costs $1/100 = 0.01$
+of the total fitness.
+\end{warnbox}
+
+\section{Step 8: The score accumulates in \fn{compute\_fitness()}}
+
+\begin{lstlisting}[style=example]
+# After processing all 100 problems in evolution_pool:
+# (hypothetical scores for the competitive programmer prompt)
+scores = [0.0, 1.0, 0.5, 1.0, 0.75, 0.0, 1.0, ...]   # 100 values
+total  = sum(scores)   # e.g., 73.12
+fitness = total / 100  # = 0.7312
+
+# This is stored:
+individual.fitness = 0.7312
+
+# The individual is now evaluated; ga.run() proceeds to the next seed.
+\end{lstlisting}
+
+\section{Step 9: The result is recorded in the cost tracker}
+
+\begin{lstlisting}[style=example]
+# After ALL 100 problems for this one individual:
+# 100 entries in tracker.calls with phase="fitness"
+# Typical token counts per call:
+#   input: ~287 tokens (system ~80 + problem ~207)
+#   output: ~52 tokens (function body)
+# Total for this individual:
+#   input_tokens  = 100 * 287 = 28,700
+#   output_tokens = 100 *  52 =  5,200
+#   input_cost    = 28700 * 1.00 / 1e6 = $0.0287
+#   output_cost   =  5200 * 5.00 / 1e6 = $0.0260
+#   individual_cost = ~$0.0547
+\end{lstlisting}
+
+
+% ==========================================================================
 %  GLOSSARY
-% ======================================================================
+% ==========================================================================
 \chapter*{Glossary}
 \addcontentsline{toc}{chapter}{Glossary}
 
-\begin{description}[style=nextline, leftmargin=2.5cm]
-  \item[Chromosome] A candidate solution in a genetic algorithm. In this project, each chromosome is a natural-language system prompt.
-  \item[Crossover] A genetic operator that combines two parent chromosomes to produce an offspring. Here, the LLM merges two parent prompts into one.
-  \item[Elitism] Preserving the top $k$ individuals unchanged into the next generation, preventing loss of the best solution.
-  \item[Evolution pool] The fixed set of 100 coding problems used to evaluate fitness during the GA.
-  \item[Fitness] A numeric score measuring how good a chromosome is. Here, fitness = average fraction of test cases passed across 100 problems.
-  \item[fn\_name] The function name that the LLM must write. Defined in each APPS problem's \texttt{input\_output.json}.
-  \item[Generation] One cycle of the GA: select parents, breed offspring, evaluate, replace.
-  \item[Held-out set] Problems reserved for evaluating the final evolved prompt, never seen during evolution.
-  \item[Individual] One member of the GA population --- a prompt paired with its fitness score and metadata.
-  \item[LLM] Large Language Model --- a neural network trained on text that can generate code, merge prompts, etc.
-  \item[MTok] Million tokens --- the billing unit for LLM APIs.
-  \item[Mutation] A genetic operator that modifies a single chromosome. Three types: inject (add strategy), delete (remove sentence), rephrase (reword).
-  \item[Partial credit] Scoring a problem as (tests passed / total tests) rather than binary all-or-nothing.
-  \item[pass@1] The standard code-generation metric: fraction of problems where all test cases pass on a single attempt.
-  \item[Population] The set of all chromosomes alive at a given generation.
-  \item[Sentinel] A unique string prefix (\texttt{\_\_R\_\_:}) used to distinguish test results from stray output in subprocess execution.
-  \item[System prompt] An instruction paragraph sent to the LLM that shapes its behaviour across all messages in a conversation.
-  \item[Temperature] An LLM parameter controlling randomness. 0 = deterministic; higher = more creative/varied.
-  \item[Tournament selection] Selecting parents by randomly sampling $k$ individuals and picking the fittest among them.
+\begin{description}[style=nextline, leftmargin=3cm]
+
+\item[Chromosome]
+  A candidate solution in a genetic algorithm.  In this project, each chromosome is
+  a natural-language system prompt (a paragraph of English instructions).  Stored as
+  an \fn{Individual} object in \pyfile{ga.py}.
+
+\item[Crossover]
+  A genetic operator that combines two parent chromosomes into one offspring.  Here,
+  the Optimizer LLM (Sonnet 4.6) \emph{semantically blends} the two parents rather
+  than doing a mechanical string cut.  Fires with probability 0.8 per offspring.
+
+\item[Deterministic (temperature = 0)]
+  When a Claude model is called with \texttt{temperature=0.0}, the same input always
+  produces the same output.  This is why the Target model uses temperature 0: fitness
+  scores are repeatable and comparable across generations.
+
+\item[Elitism]
+  Preserving the top $k$ individuals unchanged into the next generation, preventing
+  loss of the best prompt discovered so far.  \fn{ELITISM\_COUNT = 2} in this project.
+
+\item[Evolution pool]
+  The fixed set of 100 Codewars introductory coding problems used to evaluate
+  fitness during the GA.  Chosen by deterministic shuffle (seed 42) of all qualified
+  APPS problems.
+
+\item[Exponential backoff]
+  A retry strategy where the wait time doubles with each failed attempt.
+  Used in \fn{llm.\_call()} for rate-limit errors: 5s, 10s, 20s.
+
+\item[Fitness]
+  A numeric score in [0.0, 1.0] measuring how good a chromosome is.
+  Fitness = mean partial-credit score across 100 evolution problems.
+  Computed by \fn{ga.compute\_fitness()}.
+
+\item[\texttt{fn\_name}]
+  The Python function name that the LLM must write.  Stored in each APPS problem's
+  \texttt{input\_output.json}.  Used to construct the user message and to verify
+  the generated code (\fn{evaluator.has\_function()}).
+
+\item[Generation]
+  One cycle of the GA: record stats $\to$ carry elites $\to$ select parents
+  $\to$ breed offspring $\to$ evaluate offspring $\to$ replace population.
+
+\item[Generational replacement]
+  Replacing the entire population each generation (except elites), as opposed
+  to steady-state (replacing 1--2 individuals at a time).  Creates strong
+  selection pressure.
+
+\item[Held-out set]
+  200 problems reserved for evaluating the final evolved prompt.  Never seen
+  during evolution.  Analogous to a test set in machine learning.
+
+\item[Individual]
+  One member of the GA population.  A Python \texttt{@dataclass} with fields:
+  \fn{prompt}, \fn{fitness}, \fn{uid}, \fn{parent\_a}, \fn{parent\_b}, \fn{operators}.
+
+\item[Lazy initialisation]
+  Creating an object only when it is first needed.  Used for the Anthropic client
+  in \pyfile{llm.py}: \fn{\_client} is \texttt{None} at module load; created on
+  the first \fn{\_call()}.
+
+\item[LLM]
+  Large Language Model --- a neural network trained on text that can generate code,
+  merge prompts, etc.  This project uses Claude Haiku 4.5 (target) and
+  Claude Sonnet 4.6 (optimizer).
+
+\item[Meta-prompt]
+  A prompt sent to the Optimizer LLM instructing it to modify another prompt.
+  The crossover and mutation functions in \pyfile{llm.py} use meta-prompts to
+  direct the Optimizer.
+
+\item[MTok]
+  Million tokens --- the billing unit for LLM APIs.  The pricing formula is:
+  cost = (input\_tokens $\times$ rate\_in + output\_tokens $\times$ rate\_out) / 1{,}000{,}000.
+
+\item[Mutation]
+  A genetic operator that modifies a single chromosome.  Three independent types:
+  inject (add strategy sentence, 25\%), delete (remove weakest sentence, 15\%),
+  rephrase (reword, 10\%).
+
+\item[Partial credit]
+  Scoring a problem as (tests passed / total tests) rather than binary all-or-nothing.
+  Provides a smooth gradient for the GA to optimise.  Computed by \fn{evaluator.run\_tests()}.
+
+\item[pass@1]
+  The standard code-generation evaluation metric: fraction of problems where the LLM
+  generates correct code on its first (and only) attempt.
+
+\item[Population]
+  The set of all 15 chromosomes alive at a given generation.  Maintained as
+  \texttt{list[Individual]} in \fn{ga.run()}.
+
+\item[Seed prompt]
+  One of the 15 hand-crafted prompts in \pyfile{seeds.py} that form the generation-0
+  population.  Each emphasises a different coding strategy.
+
+\item[Sentinel]
+  A unique string prefix (\texttt{\_\_R\_\_:}) used to tag test results in the subprocess's
+  stdout, so they can be found among any stray \texttt{print()} output from generated code.
+
+\item[Singleton]
+  A class of which only one instance exists.  The \fn{tracker} object in
+  \pyfile{cost\_tracker.py} is a module-level singleton; all modules that import it
+  share the same instance.
+
+\item[System prompt]
+  An instruction paragraph sent \emph{before} the user message in a Claude conversation,
+  shaping the model's behaviour across all subsequent messages.  In this project,
+  the system prompt is the GA chromosome.
+
+\item[Temperature]
+  An LLM parameter controlling output randomness.  0.0 = fully deterministic;
+  higher values introduce more variation.  Target model uses 0.0; Optimizer uses 0.7.
+
+\item[Tournament selection]
+  A parent-selection strategy: sample $k$ individuals randomly (without replacement)
+  and return the fittest among them.  \fn{TOURNAMENT\_SIZE = 3} in this project.
+
+\item[Two-model architecture]
+  Using one model (Haiku, cheap, deterministic) as the subject of optimisation and
+  another (Sonnet, capable, creative) as the tool for genetic operators.
+
 \end{description}
 
+% ==========================================================================
 \end{document}

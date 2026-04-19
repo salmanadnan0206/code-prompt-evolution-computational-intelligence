@@ -2,14 +2,18 @@
 main.py — Entry point.  Load data → run GA → save results → save cost report.
 
 Usage:
-    export ANTHROPIC_API_KEY="sk-ant-..."
     python main.py
+
+Requires the Claude Code CLI to be installed and authenticated:
+    claude auth login    (one-time setup; uses your Claude.ai Max subscription)
 
 Results are saved to Code/results/run_<timestamp>/
 Cost reports are saved to Costs/cost_<timestamp>.json  (new file each run)
 """
 
 import json
+import shutil
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -49,10 +53,10 @@ def evaluate_on_holdout(best_prompt: str, holdout: list[dict]) -> float:
     """Evaluate the best evolved prompt on the held-out test set."""
     total = 0.0
     for i, prob in enumerate(holdout):
-        response = llm.generate_code(best_prompt, prob["question"], prob["fn_name"])
+        response = llm.generate_code(best_prompt, prob["question"])
         code = evaluator.extract_code(response)
         score = evaluator.run_tests(
-            code, prob["fn_name"], prob["inputs"], prob["outputs"], config.EXEC_TIMEOUT,
+            code, prob["inputs"], prob["outputs"], config.EXEC_TIMEOUT,
         )
         total += score
         if (i + 1) % 50 == 0:
@@ -60,19 +64,43 @@ def evaluate_on_holdout(best_prompt: str, holdout: list[dict]) -> float:
     return total / len(holdout)
 
 
-def main():
-    # --- pre-flight checks ---
-    if not config.ANTHROPIC_API_KEY:
-        print("ERROR: set ANTHROPIC_API_KEY environment variable.")
+def _check_cli() -> None:
+    """Verify `claude` CLI is installed and authenticated before starting."""
+    if not shutil.which("claude"):
+        print("ERROR: `claude` command not found.")
+        print("Install Claude Code: https://claude.ai/code")
         sys.exit(1)
 
-    if not config.APPS_TRAIN.exists():
-        print(f"ERROR: APPS train directory not found: {config.APPS_TRAIN}")
+    try:
+        result = subprocess.run(
+            ["claude", "auth", "status", "--json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        # `auth status` may not support --json on all versions; parse either way
+        output = result.stdout.strip() or result.stderr.strip()
+        if '"loggedIn": false' in output or '"loggedIn":false' in output:
+            raise ValueError("not logged in")
+        if result.returncode != 0 and not output:
+            raise ValueError("auth check failed")
+    except (subprocess.TimeoutExpired, ValueError, FileNotFoundError) as e:
+        print(f"ERROR: Claude CLI authentication problem: {e}")
+        print("Run:  claude auth login")
+        sys.exit(1)
+
+
+def main():
+    # --- pre-flight checks ---
+    _check_cli()
+
+    if not config.APPS_TRAIN.exists() or not config.APPS_TEST.exists():
+        print(f"ERROR: APPS dataset directories not found.")
+        print(f"  Expected train: {config.APPS_TRAIN}")
+        print(f"  Expected test:  {config.APPS_TEST}")
         sys.exit(1)
 
     # --- load and split dataset ---
-    print("Loading APPS Codewars introductory problems …")
-    all_problems = dataset.load_problems(config.APPS_TRAIN)
+    print("Loading 300 pre-selected Codeforces problems …")
+    all_problems = dataset.load_problems()
     print(f"  Loaded {len(all_problems)} problems")
 
     if len(all_problems) < config.EVOLUTION_SIZE + config.HOLDOUT_SIZE:
@@ -160,7 +188,7 @@ def main():
         "evolution_size": config.EVOLUTION_SIZE,
     })
     print(f"\nCost report saved to: {cost_path}")
-    print(f"Total cost this run:  ${tracker.total():.2f}")
+    print(f"Estimated API-equivalent cost: ${tracker.total():.4f}  (no actual charge on Max subscription)")
     print(f"\nAll results saved to: {run_dir}")
 
 

@@ -1,115 +1,133 @@
 """
 seeds.py — Initial population: 15 diverse system-level instruction prompts.
 
-These are the chromosomes fed to generation 0.  Diversity is intentional —
-each emphasises a different coding strategy so the GA has a rich search
-starting point.  The GA will crossover and mutate these into better prompts.
+Every prompt requires a complete, compilable C++ program as output.
+Diversity is intentional — each emphasises a different cognitive strategy
+so the GA has a rich starting point to crossover and mutate from.
 """
 
 SEED_PROMPTS: list[str] = [
-    # 1 — Structured analysis
+    # 1 — Structured analysis, detailed
     (
-        "You are an expert Python programmer. Before writing code, analyse the "
-        "problem: identify the input types, the expected output type, and any "
-        "edge cases (empty input, zero, negatives). Then write a clean, correct "
-        "Python function. Output only the function — no explanations."
+        "You are an expert competitive programmer. Before writing any code, "
+        "analyse the problem carefully: identify the input format, the output "
+        "format, the constraints, and any edge cases (empty input, n=1, maximum "
+        "values, overflow risk). Then write a complete, compilable C++ program "
+        "that reads from stdin using cin and writes to stdout using cout. Include "
+        "main(). Output only the C++ source code — no explanations, no markdown "
+        "commentary."
     ),
 
-    # 2 — Competitive-programmer mindset
+    # 2 — Terse and direct
     (
-        "Think like a competitive programmer. Identify the algorithm pattern "
-        "(math, string manipulation, recursion, sorting, hashing). Write the "
-        "most direct, correct Python solution. Output only the function definition."
+        "Full C++ solution. Reads stdin, writes stdout. Include main(). "
+        "Compiles with g++ -std=c++17. No commentary, just working code."
     ),
 
-    # 3 — Return-type focus
+    # 3 — Competitive-programmer mindset
     (
-        "You are solving a coding kata. Read the problem twice. Pay close "
-        "attention to what the function must return — the exact type and format. "
-        "Handle edge cases. Output just the function."
+        "Think like a competitive programmer. Identify the algorithm pattern — "
+        "greedy, dynamic programming, graph traversal, binary search, math. "
+        "Write the most direct correct solution as a complete C++ program. "
+        "Use cin/cout, include main(), handle all cases within the constraints. "
+        "Output only the program."
     ),
 
     # 4 — Step-by-step reasoning
     (
-        "Approach this problem step by step: (1) understand the input-output "
-        "relationship, (2) identify the core algorithm, (3) handle boundary "
-        "conditions, (4) implement cleanly in Python. Return only the function."
+        "Approach this step by step: (1) understand the input-output relationship, "
+        "(2) identify the core algorithm, (3) handle boundary conditions, "
+        "(4) implement as a complete C++ program with main() that reads from cin "
+        "and writes to cout. Output only the C++ source."
     ),
 
     # 5 — Example-driven
     (
-        "Before coding, trace through the provided examples manually to verify "
-        "your understanding of the expected behaviour. Then implement a clean "
-        "Python function that passes all cases."
+        "Before you write anything, trace through the sample inputs manually. "
+        "Confirm you understand what the program should output and why. "
+        "Then write a complete C++ program — standard input, standard output, "
+        "compiles cleanly with g++ -std=c++17. Just the code."
     ),
 
-    # 6 — Minimal and precise
+    # 6 — Conversational
     (
-        "Write a correct Python function. Avoid unnecessary imports and extra "
-        "code. The simplest solution that handles all cases is the best solution."
+        "I need a working solution to this Codeforces problem. Give me the full "
+        "C++ source — main function and everything. It should compile and handle "
+        "all the edge cases in the constraints. Just the code, nothing else."
     ),
 
     # 7 — Edge-case defender
     (
-        "You are a careful Python programmer. Explicitly think about boundary "
-        "conditions: empty input, single element, zero, negative values, and "
-        "the maximum possible input. Write a function that handles all of them."
+        "You are a careful C++ programmer. Explicitly think about boundary "
+        "conditions: n=0, n=1, all elements equal, maximum possible values, "
+        "integer overflow. Then write a complete, self-contained C++ program "
+        "with main() that handles all of them. Reads from stdin, writes to stdout."
     ),
 
     # 8 — Algorithm-first
     (
-        "Determine the most appropriate algorithm or data structure before "
-        "writing any code. Implement it directly in Python. Avoid "
-        "over-engineering — correctness and clarity are the priorities."
+        "Determine the correct algorithm or data structure before writing a "
+        "single line of code. Consider time and space complexity against the "
+        "given constraints. Then implement it as a complete C++ program — "
+        "include main(), use standard I/O. Output only the code."
     ),
 
-    # 9 — Output-format guard
+    # 9 — Specification-heavy
     (
-        "Solve this Python coding problem precisely. Check the expected return "
-        "type carefully — integer, list, string, boolean, or tuple. Your "
-        "function must return exactly that type. Output only the function."
+        "Write a complete, compilable C++ program satisfying all of these: "
+        "(1) reads all input from stdin via cin, "
+        "(2) writes all output to stdout via cout, "
+        "(3) compiles without warnings using g++ -O2 -std=c++17, "
+        "(4) handles every case within the stated constraints correctly, "
+        "(5) produces exactly the expected output format with no extra lines. "
+        "Output only the C++ source code."
     ),
 
     # 10 — Pseudocode-then-code
     (
-        "First mentally sketch the algorithm in plain English, then translate "
-        "it directly into Python. Keep the implementation close to the "
-        "pseudocode so it is easy to verify. Output only the function."
+        "First mentally sketch the algorithm in plain English until you are "
+        "confident it is correct. Then translate it directly into C++. "
+        "Give me the entire program — main included — using cin and cout. "
+        "No explanation, no pseudocode in the output, just the C++ source."
     ),
 
     # 11 — Constraint-aware
     (
         "Read the problem constraints carefully. Choose an algorithm whose "
-        "time complexity fits within those constraints. Implement it cleanly "
-        "in Python and return only the function definition."
+        "time complexity fits within those constraints — if n can be 10^5, "
+        "O(n^2) will TLE. Implement your solution as a complete C++ program "
+        "with main() and standard I/O. Return only the code."
     ),
 
     # 12 — Defensive / robust
     (
-        "Write a robust Python function. Assume the input can be anything "
-        "within the stated constraints — do not assume best-case input. "
-        "Handle all valid inputs correctly and return the right value."
+        "Assume the judge's test data includes adversarial inputs at the "
+        "extreme boundaries of the constraints. Write a robust, complete C++ "
+        "program that handles them all correctly. Reads from stdin, prints to "
+        "stdout. Include main(). No commentary."
     ),
 
     # 13 — Readability-first
     (
-        "Write clean, readable Python code. Use meaningful variable names and "
-        "keep the logic straightforward. Correct and readable code beats "
-        "clever but obscure code. Output only the function."
+        "Write clean, readable C++ code. Use meaningful variable names and keep "
+        "the logic easy to follow. Correctness matters more than cleverness. "
+        "Give me the complete source file — main function included — that reads "
+        "from standard input and writes to standard output."
     ),
 
     # 14 — Verify-against-examples
     (
-        "Expert Python programmer: analyse the input constraints, pick the "
-        "right algorithm, and mentally verify your solution against the given "
-        "examples before finalising. Output only the function."
+        "Expert competitive programmer: analyse the constraints, pick the right "
+        "algorithm, then mentally verify your solution against the provided "
+        "sample inputs before writing code. Output a complete C++ program — "
+        "not a function snippet, the full source with main() — using cin/cout."
     ),
 
     # 15 — Direct and focused
     (
-        "Write a Python function to solve the given problem. Think about "
-        "what transformation is needed, handle edge cases, and implement the "
-        "simplest correct solution. No test code, no extra output."
+        "Solve this Codeforces problem in C++. Give me the entire program, not "
+        "just a function. It needs to compile with g++ and pass all test cases. "
+        "Reads from stdin, writes to stdout. Output only the code."
     ),
 ]
 

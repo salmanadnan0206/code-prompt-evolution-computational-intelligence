@@ -1,99 +1,186 @@
 """
-llm.py — All Claude API calls: code generation, crossover, and mutation.
+llm.py — All LLM calls via Claude Code CLI (claude -p).
 
-Two models are used:
-    TARGET_MODEL    — generates code (cheap, deterministic, temperature 0)
-    OPTIMIZER_MODEL — performs crossover and mutation (creative, temperature 0.7)
+Uses the Claude.ai subscription (Max plan) instead of the Anthropic API SDK,
+so no per-token charges are incurred beyond the subscription cost.
 
-Every call is logged to the CostTracker singleton (see cost_tracker.py).
+Two models:
+    TARGET_MODEL    — generates code (fitness evaluation)
+    OPTIMIZER_MODEL — crossover and mutation meta-operations
+
+NOTE: The CLI does not expose a --temperature flag. Code generation therefore
+      runs at the model's default temperature instead of the configured 0.0.
+      Fitness scores may vary slightly between runs as a result.
 """
 
+import json
 import re
+import subprocess
 import time
-import anthropic
+
 import config
 from cost_tracker import tracker
-
-
-_client: anthropic.Anthropic | None = None
-
-
-def _get_client() -> anthropic.Anthropic:
-    """Lazy-initialise the Anthropic client."""
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-    return _client
 
 
 def _call(
     phase: str,
     model: str,
-    temperature: float,
-    max_tokens: int,
     system: str,
     user: str,
-    retries: int = 3,
+    retries: int = 4,
 ) -> str:
     """
-    Call the Claude API with automatic retry on transient errors.
-    Logs token usage to the global CostTracker.
-    Returns the assistant's text response.
+    Invoke `claude -p` in non-interactive JSON mode.
+
+    Handles:
+      - Rate-limit errors  → exponential back-off (30 s base)
+      - Transient errors   → short back-off (5 s base)
+      - Timeouts           → retry up to `retries` times
+      - Auth errors        → raises RuntimeError immediately (no retry)
+
+    Logs token usage and cost to the global CostTracker.
+    Returns the assistant text, or "" after all retries are exhausted.
     """
-    client = _get_client()
+    cmd = [
+        "claude",
+        "-p", user,
+        "--output-format", "json",
+        "--model", model,
+        "--max-turns", "1",
+        "--tools", "",          # disable all built-in tools; pure text generation
+        "--system-prompt", system,
+    ]
+
     for attempt in range(retries):
+        proc = None
         try:
-            resp = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system,
-                messages=[{"role": "user", "content": user}],
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=config.CLAUDE_CLI_TIMEOUT,
             )
-            # Log tokens to cost tracker
+
+            stdout = proc.stdout.strip()
+
+            # Empty stdout usually means a hard startup failure
+            if not stdout:
+                stderr = proc.stderr.strip()
+                _check_auth_error(stderr)
+                if attempt < retries - 1:
+                    wait = 2 ** attempt * 5
+                    print(f"  [empty-output] stderr={stderr!r} | retry in {wait}s …")
+                    time.sleep(wait)
+                    continue
+                return ""
+
+            try:
+                data = json.loads(stdout)
+            except json.JSONDecodeError:
+                raw = stdout[:120]
+                if attempt < retries - 1:
+                    print(f"  [json-parse-error] raw={raw!r} | retry in 5s …")
+                    time.sleep(5)
+                    continue
+                print(f"  [json-parse-error] giving up | raw={raw!r}")
+                return ""
+
+            if data.get("is_error"):
+                result_msg = str(data.get("result", ""))
+                api_status = data.get("api_error_status")
+
+                _check_auth_error(result_msg)  # raises immediately if auth issue
+
+                # Rate limit: HTTP 429 or message contains "rate"/"limit"
+                is_rate_limit = (
+                    api_status == 429
+                    or "rate" in result_msg.lower()
+                    or "too many" in result_msg.lower()
+                )
+                if is_rate_limit and attempt < retries - 1:
+                    wait = 2 ** attempt * 30
+                    print(f"  [rate-limit] waiting {wait}s …")
+                    time.sleep(wait)
+                    continue
+
+                if attempt < retries - 1:
+                    wait = 2 ** attempt * 5
+                    print(f"  [error] {result_msg!r} | retry in {wait}s …")
+                    time.sleep(wait)
+                    continue
+
+                print(f"  [error] {result_msg}")
+                return ""
+
+            # --- success path ---
+            result_text = data.get("result", "")
+
+            # Extract per-model token stats (most accurate source)
+            model_usage = data.get("modelUsage", {}).get(model, {})
+            input_tokens  = model_usage.get("inputTokens", 0)
+            output_tokens = model_usage.get("outputTokens", 0)
+            cost_usd      = model_usage.get("costUSD", data.get("total_cost_usd", 0.0))
+
             tracker.record(
                 phase=phase,
                 model=model,
-                input_tokens=resp.usage.input_tokens,
-                output_tokens=resp.usage.output_tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=cost_usd,
             )
-            return resp.content[0].text
-        except anthropic.RateLimitError:
-            wait = 2 ** attempt * 5
-            print(f"  [rate-limit] waiting {wait}s …")
-            time.sleep(wait)
-        except anthropic.APIError as e:
-            if attempt == retries - 1:
-                print(f"  [api-error] {e}")
-                return ""
-            time.sleep(2)
+
+            return result_text
+
+        except subprocess.TimeoutExpired:
+            print(f"  [timeout] attempt {attempt + 1}/{retries}")
+            if attempt < retries - 1:
+                time.sleep(10)
+
+        except RuntimeError:
+            raise  # auth errors bubble up immediately
+
+        except FileNotFoundError:
+            raise RuntimeError(
+                "`claude` command not found on PATH. "
+                "Install Claude Code: https://claude.ai/code"
+            )
+
     return ""
+
+
+def _check_auth_error(msg: str) -> None:
+    """Raise RuntimeError immediately if `msg` signals an authentication failure."""
+    lower = msg.lower()
+    if "not logged in" in lower or "please run /login" in lower:
+        raise RuntimeError(
+            "Claude CLI is not authenticated.\n"
+            "Run:  claude auth login\n"
+            "Then re-run this script."
+        )
 
 
 # ---------------------------------------------------------------------------
 # Code generation  (fitness evaluation)
 # ---------------------------------------------------------------------------
 
-def generate_code(system_prompt: str, question: str, fn_name: str) -> str:
+def generate_code(system_prompt: str, question: str) -> str:
     """
-    Ask the target LLM to solve a coding problem.
+    Ask the target LLM to solve a Codeforces problem with a complete C++ program.
 
     Arguments:
         system_prompt — the GA chromosome (instruction being evolved)
-        question      — the APPS problem text
-        fn_name       — name the function must have
+        question      — the problem statement text
 
     Returns the raw LLM response (code extraction happens in evaluator.py).
     """
     user_msg = (
         f"{question}\n\n"
-        f"Write a Python function named `{fn_name}`."
+        "Write a complete, compilable C++ program that reads from stdin "
+        "and writes the answer to stdout."
     )
     return _call(
         phase="fitness",
         model=config.TARGET_MODEL,
-        temperature=config.TARGET_TEMPERATURE,
-        max_tokens=config.MAX_CODE_TOKENS,
         system=system_prompt,
         user=user_msg,
     )
@@ -127,8 +214,6 @@ def crossover(prompt_a: str, prompt_b: str) -> str:
     return _call(
         phase="crossover",
         model=config.OPTIMIZER_MODEL,
-        temperature=config.OPTIMIZER_TEMPERATURE,
-        max_tokens=config.MAX_OPERATOR_TOKENS,
         system=_CROSSOVER_SYSTEM,
         user=_CROSSOVER_USER.format(parent_a=prompt_a, parent_b=prompt_b),
     ).strip()
@@ -156,8 +241,6 @@ def mutate_inject(prompt: str) -> str:
     return _call(
         phase="mutate_inject",
         model=config.OPTIMIZER_MODEL,
-        temperature=config.OPTIMIZER_TEMPERATURE,
-        max_tokens=config.MAX_OPERATOR_TOKENS,
         system=_MUT_SYSTEM,
         user=user,
     ).strip()
@@ -167,7 +250,7 @@ def mutate_delete(prompt: str) -> str:
     """Remove one sentence from the prompt to make it leaner."""
     sentences = re.split(r"(?<=[.!?])\s+", prompt)
     if len(sentences) <= 1:
-        return prompt  # nothing to delete — keep as-is
+        return prompt  # nothing to delete
     user = (
         "Remove one sentence from this instruction prompt — the one that "
         "contributes the least to code-generation quality. Keep everything "
@@ -177,8 +260,6 @@ def mutate_delete(prompt: str) -> str:
     return _call(
         phase="mutate_delete",
         model=config.OPTIMIZER_MODEL,
-        temperature=config.OPTIMIZER_TEMPERATURE,
-        max_tokens=config.MAX_OPERATOR_TOKENS,
         system=_MUT_SYSTEM,
         user=user,
     ).strip()
@@ -195,8 +276,6 @@ def mutate_rephrase(prompt: str) -> str:
     return _call(
         phase="mutate_rephrase",
         model=config.OPTIMIZER_MODEL,
-        temperature=config.OPTIMIZER_TEMPERATURE,
-        max_tokens=config.MAX_OPERATOR_TOKENS,
         system=_MUT_SYSTEM,
         user=user,
     ).strip()

@@ -1,8 +1,12 @@
 """
-cost_tracker.py — Track every API call's token usage and compute running cost.
+cost_tracker.py — Track every LLM call's token usage and estimated cost.
 
 Every time main.py runs, a new JSON file is saved to ../Costs/ with a
 complete breakdown: per-call tokens, per-phase subtotals, and grand total.
+
+When running via the Claude Code CLI (subscription mode), costs reported are
+the API-equivalent estimates returned by the CLI — no actual charges are made
+beyond the flat subscription fee.
 
 Pricing source: https://docs.anthropic.com/en/docs/about-claude/pricing
                  (fetched April 2026)
@@ -32,7 +36,7 @@ PRICING = {
     "claude-sonnet-4-6:batch":         (1.50,  7.50),
 }
 
-COSTS_DIR = Path(__file__).parent.parent / "Costs"
+COSTS_DIR = Path(__file__).parent / "Costs"
 
 
 # ---------------------------------------------------------------------------
@@ -44,19 +48,26 @@ class CallRecord:
     model: str
     input_tokens: int
     output_tokens: int
+    cost_usd: float | None = None  # when set, used directly instead of pricing table
 
     @property
     def input_cost(self) -> float:
+        if self.cost_usd is not None:
+            return 0.0  # cost rolled into total_cost via cost_usd
         rate_in, _ = PRICING.get(self.model, (0, 0))
         return self.input_tokens * rate_in / 1_000_000
 
     @property
     def output_cost(self) -> float:
+        if self.cost_usd is not None:
+            return 0.0
         _, rate_out = PRICING.get(self.model, (0, 0))
         return self.output_tokens * rate_out / 1_000_000
 
     @property
     def total_cost(self) -> float:
+        if self.cost_usd is not None:
+            return self.cost_usd
         return self.input_cost + self.output_cost
 
 
@@ -71,13 +82,21 @@ class CostTracker:
         self.start_time: float = time.time()
 
     def record(self, phase: str, model: str,
-               input_tokens: int, output_tokens: int):
-        """Log one API call."""
+                input_tokens: int = 0, output_tokens: int = 0,
+                cost_usd: float | None = None):
+        """
+        Log one LLM call.
+
+        When called from the CLI path, pass cost_usd (reported directly by the
+        CLI JSON) along with token counts. When cost_usd is provided it takes
+        precedence over pricing-table calculations.
+        """
         self.calls.append(CallRecord(
             phase=phase,
             model=model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cost_usd=cost_usd,
         ))
 
     # --- aggregation helpers ---
@@ -89,21 +108,15 @@ class CostTracker:
                     "calls": 0,
                     "input_tokens": 0,
                     "output_tokens": 0,
-                    "input_cost_usd": 0.0,
-                    "output_cost_usd": 0.0,
                     "total_cost_usd": 0.0,
                 }
             p = phases[c.phase]
-            p["calls"]           += 1
-            p["input_tokens"]    += c.input_tokens
-            p["output_tokens"]   += c.output_tokens
-            p["input_cost_usd"]  += c.input_cost
-            p["output_cost_usd"] += c.output_cost
-            p["total_cost_usd"]  += c.total_cost
-        # round floats
+            p["calls"]          += 1
+            p["input_tokens"]   += c.input_tokens
+            p["output_tokens"]  += c.output_tokens
+            p["total_cost_usd"] += c.total_cost
         for p in phases.values():
-            for k in ("input_cost_usd", "output_cost_usd", "total_cost_usd"):
-                p[k] = round(p[k], 6)
+            p["total_cost_usd"] = round(p["total_cost_usd"], 6)
         return phases
 
     def _by_model(self) -> dict:
@@ -114,20 +127,15 @@ class CostTracker:
                     "calls": 0,
                     "input_tokens": 0,
                     "output_tokens": 0,
-                    "input_cost_usd": 0.0,
-                    "output_cost_usd": 0.0,
                     "total_cost_usd": 0.0,
                 }
             m = models[c.model]
-            m["calls"]           += 1
-            m["input_tokens"]    += c.input_tokens
-            m["output_tokens"]   += c.output_tokens
-            m["input_cost_usd"]  += c.input_cost
-            m["output_cost_usd"] += c.output_cost
-            m["total_cost_usd"]  += c.total_cost
+            m["calls"]          += 1
+            m["input_tokens"]   += c.input_tokens
+            m["output_tokens"]  += c.output_tokens
+            m["total_cost_usd"] += c.total_cost
         for m in models.values():
-            for k in ("input_cost_usd", "output_cost_usd", "total_cost_usd"):
-                m[k] = round(m[k], 6)
+            m["total_cost_usd"] = round(m["total_cost_usd"], 6)
         return models
 
     def total(self) -> float:
@@ -149,21 +157,19 @@ class CostTracker:
         elapsed   = time.time() - self.start_time
 
         report = {
-            "timestamp":      ts,
-            "elapsed_seconds": round(elapsed, 1),
-            "total_api_calls": len(self.calls),
+            "timestamp":        ts,
+            "elapsed_seconds":  round(elapsed, 1),
+            "mode":             "claude-code-cli (subscription)",
+            "note":             (
+                "Costs shown are API-equivalent estimates from the CLI. "
+                "No actual per-token charges on Max subscription."
+            ),
+            "total_llm_calls":     len(self.calls),
             "total_input_tokens":  total_in,
             "total_output_tokens": total_out,
-            "total_input_cost_usd":  round(sum(c.input_cost for c in self.calls), 6),
-            "total_output_cost_usd": round(sum(c.output_cost for c in self.calls), 6),
-            "grand_total_usd":       round(self.total(), 6),
+            "grand_total_estimated_usd": round(self.total(), 6),
             "breakdown_by_phase": self._by_phase(),
             "breakdown_by_model": self._by_model(),
-            "pricing_used": {
-                model: {"input_per_MTok": r[0], "output_per_MTok": r[1]}
-                for model, r in PRICING.items()
-                if not model.endswith(":batch")
-            },
         }
         if extra:
             report["run_info"] = extra
