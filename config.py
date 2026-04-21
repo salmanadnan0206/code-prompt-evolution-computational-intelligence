@@ -21,7 +21,7 @@ RESULTS_DIR  = Path(__file__).parent / "results"
 EVOLUTION_SIZE  = 100   # fixed pool for fitness evaluation during GA
 HOLDOUT_SIZE    = 200   # held-out for final within-distribution test
 RANDOM_SEED     = 42
-MAX_TEST_CASES  = 10    # cap per problem for speed (first N test cases used)
+EARLY_STOP_FAILURES = 3   # stop running test cases after this many consecutive failures
 
 # ---------------------------------------------------------------------------
 # Genetic Algorithm
@@ -57,10 +57,14 @@ MAX_CODE_TOKENS     = 1024   # kept for documentation; not enforced by CLI
 MAX_OPERATOR_TOKENS = 600    # kept for documentation; not enforced by CLI
 
 # Seconds to wait for a single `claude -p` subprocess before timing out.
-CLAUDE_CLI_TIMEOUT = 120
+# Lowered from 120 → 90 to fail-fast on stuck calls and leave budget for retries.
+CLAUDE_CLI_TIMEOUT = 90
 
 # ---------------------------------------------------------------------------
 # Code execution  (g++ compilation + binary runs)
 # ---------------------------------------------------------------------------
-EXEC_TIMEOUT    = 5    # seconds per test-case binary run
-COMPILE_TIMEOUT = 30   # seconds allowed for g++ compilation
+EXEC_TIMEOUT    = 2    # seconds per test-case binary run
+COMPILE_TIMEOUT = 15   # seconds allowed for g++ compilation
+PARALLEL_EVALS  = 5    # problems evaluated simultaneously per individual
+                       # (lowered from 10 → 5 to eliminate CLI contention that
+                       # caused ~19% empty-response failures)

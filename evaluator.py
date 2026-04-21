@@ -15,11 +15,14 @@ Fitness = (test cases passed) / (test cases evaluated) — partial credit.
 import os
 import re
 import subprocess
-import sys
 import tempfile
+import time
 from typing import Optional
 
 import config
+
+# Max chars to keep from stdout/expected per test case (prevents huge JSONL lines)
+_MAX_IO_LEN = 500
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +80,7 @@ def _compile(code: str) -> tuple[Optional[str], str]:
     """
     src_fd, src_path = tempfile.mkstemp(suffix=".cpp")
     bin_path = src_path[:-4]   # strip .cpp
+    _success = False
     try:
         with os.fdopen(src_fd, "w") as f:
             f.write(code)
@@ -91,6 +95,7 @@ def _compile(code: str) -> tuple[Optional[str], str]:
         if result.returncode != 0:
             return None, result.stderr[:500]
 
+        _success = True
         return bin_path, ""
 
     except subprocess.TimeoutExpired:
@@ -104,6 +109,11 @@ def _compile(code: str) -> tuple[Optional[str], str]:
             os.unlink(src_path)
         except OSError:
             pass
+        if not _success:
+            try:
+                os.unlink(bin_path)
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -131,37 +141,133 @@ def _run_one(bin_path: str, stdin_str: str, timeout: int) -> Optional[str]:
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def run_tests(
+def run_tests_verbose(
     code: str,
     inputs: list,
     outputs: list,
-    timeout: int = 5,
-) -> float:
+    timeout: int = 2,
+) -> dict:
     """
-    Compile the C++ code and run it against up to MAX_TEST_CASES test cases.
+    Compile + run all test cases, returning a DETAILED dict for logging.
 
-    Returns partial-credit score: (passed) / (evaluated).
-    Returns 0.0 on empty code, compilation failure, or all timeouts.
+    Returned dict schema:
+        {
+          "score":          float,       # passed / total
+          "reason":         str,         # "empty_code" | "compile_fail" | "no_tests"
+                                         # | "perfect" | "partial_pass"
+                                         # | "all_fail" | "all_fail_early_stop"
+          "compile": {
+              "success":    bool,
+              "error":      str | None,  # g++ stderr on failure
+              "time_s":     float,
+          },
+          "test_cases": [
+              {
+                "index":    int,
+                "passed":   bool,
+                "actual":   str | None,  # truncated to _MAX_IO_LEN
+                "expected": str,         # truncated to _MAX_IO_LEN
+                "time_s":   float,
+                "timeout":  bool,
+              }, ...
+          ],
+          "tests_total":    int,         # total available
+          "tests_run":      int,         # how many actually executed (early-stop cuts)
+          "early_stopped":  bool,
+          "total_test_time_s": float,
+        }
+
+    Early stopping: stop after EARLY_STOP_FAILURES consecutive failures.
+    Score denominator is always total test count (fair penalty for bad solutions).
     """
+    result: dict = {
+        "score": 0.0,
+        "reason": None,
+        "compile": {"success": False, "error": None, "time_s": 0.0},
+        "test_cases": [],
+        "tests_total": len(inputs),
+        "tests_run": 0,
+        "early_stopped": False,
+        "total_test_time_s": 0.0,
+    }
+
     if not code or not code.strip():
-        return 0.0
+        result["reason"] = "empty_code"
+        return result
 
+    # --- compile ---
+    t0 = time.monotonic()
     bin_path, err = _compile(code)
+    result["compile"]["time_s"] = round(time.monotonic() - t0, 3)
+
     if bin_path is None:
-        return 0.0
+        result["reason"] = "compile_fail"
+        result["compile"]["error"] = err[:500] if err else "unknown"
+        return result
 
+    result["compile"]["success"] = True
+
+    # --- run tests ---
     try:
-        n = min(len(inputs), config.MAX_TEST_CASES)
-        passed = 0
-        for i in range(n):
-            actual = _run_one(bin_path, inputs[i], timeout)
-            if actual is not None and _outputs_match(actual, outputs[i]):
-                passed += 1
+        n = len(inputs)
+        if n == 0:
+            result["reason"] = "no_tests"
+            return result
 
-        return passed / n if n > 0 else 0.0
+        passed = 0
+        consecutive_fails = 0
+        t_tests_start = time.monotonic()
+
+        for i in range(n):
+            t_tc = time.monotonic()
+            actual = _run_one(bin_path, inputs[i], timeout)
+            tc_time = round(time.monotonic() - t_tc, 3)
+
+            is_pass = actual is not None and _outputs_match(actual, outputs[i])
+
+            result["test_cases"].append({
+                "index":    i,
+                "passed":   is_pass,
+                "actual":   (actual[:_MAX_IO_LEN] if actual is not None else None),
+                "expected": outputs[i][:_MAX_IO_LEN] if isinstance(outputs[i], str) else str(outputs[i])[:_MAX_IO_LEN],
+                "time_s":   tc_time,
+                "timeout":  actual is None,
+            })
+            result["tests_run"] = i + 1
+
+            if is_pass:
+                passed += 1
+                consecutive_fails = 0
+            else:
+                consecutive_fails += 1
+                if consecutive_fails >= config.EARLY_STOP_FAILURES:
+                    result["early_stopped"] = True
+                    break
+
+        result["total_test_time_s"] = round(time.monotonic() - t_tests_start, 3)
+        result["score"] = passed / n
+
+        if passed == n:
+            result["reason"] = "perfect"
+        elif passed == 0:
+            result["reason"] = "all_fail_early_stop" if result["early_stopped"] else "all_fail"
+        else:
+            result["reason"] = "partial_pass"
+
+        return result
 
     finally:
         try:
             os.unlink(bin_path)
         except OSError:
             pass
+
+
+def run_tests(
+    code: str,
+    inputs: list,
+    outputs: list,
+    timeout: int = 2,
+) -> float:
+    """Thin wrapper — returns only the float score (backward compat)."""
+    return run_tests_verbose(code, inputs, outputs, timeout)["score"]

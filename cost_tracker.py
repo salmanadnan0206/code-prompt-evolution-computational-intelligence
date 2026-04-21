@@ -13,8 +13,9 @@ Pricing source: https://docs.anthropic.com/en/docs/about-claude/pricing
 """
 
 import json
+import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -75,86 +76,79 @@ class CallRecord:
 # Run-level tracker
 # ---------------------------------------------------------------------------
 class CostTracker:
-    """Accumulates CallRecords and saves a full breakdown JSON on flush."""
+    """Streams each call to a JSONL file immediately; keeps only running totals in memory."""
 
     def __init__(self):
-        self.calls: list[CallRecord] = []
         self.start_time: float = time.time()
+        self._jsonl_path: Path | None = None
+        self._lock = threading.Lock()
+        # running totals only — no per-call list kept in memory
+        self._total_calls: int = 0
+        self._total_input_tokens: int = 0
+        self._total_output_tokens: int = 0
+        self._total_cost_usd: float = 0.0
+        self._phase_totals: dict = {}
+        self._model_totals: dict = {}
+
+    def set_log_path(self, path: Path) -> None:
+        """Point the tracker at a JSONL file for streaming writes."""
+        self._jsonl_path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
 
     def record(self, phase: str, model: str,
                 input_tokens: int = 0, output_tokens: int = 0,
                 cost_usd: float | None = None):
         """
-        Log one LLM call.
-
-        When called from the CLI path, pass cost_usd (reported directly by the
-        CLI JSON) along with token counts. When cost_usd is provided it takes
-        precedence over pricing-table calculations.
+        Log one LLM call — written to disk immediately, not kept in memory.
+        Thread-safe: protected by internal lock.
         """
-        self.calls.append(CallRecord(
-            phase=phase,
-            model=model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
+        rec = CallRecord(
+            phase=phase, model=model,
+            input_tokens=input_tokens, output_tokens=output_tokens,
             cost_usd=cost_usd,
-        ))
+        )
+        call_cost = rec.total_cost
+        del rec  # no longer needed — totals extracted
 
-    # --- aggregation helpers ---
-    def _by_phase(self) -> dict:
-        phases: dict[str, dict] = {}
-        for c in self.calls:
-            if c.phase not in phases:
-                phases[c.phase] = {
-                    "calls": 0,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_cost_usd": 0.0,
-                }
-            p = phases[c.phase]
-            p["calls"]          += 1
-            p["input_tokens"]   += c.input_tokens
-            p["output_tokens"]  += c.output_tokens
-            p["total_cost_usd"] += c.total_cost
-        for p in phases.values():
-            p["total_cost_usd"] = round(p["total_cost_usd"], 6)
-        return phases
+        with self._lock:
+            # update running totals
+            self._total_calls += 1
+            self._total_input_tokens += input_tokens
+            self._total_output_tokens += output_tokens
+            self._total_cost_usd += call_cost
 
-    def _by_model(self) -> dict:
-        models: dict[str, dict] = {}
-        for c in self.calls:
-            if c.model not in models:
-                models[c.model] = {
-                    "calls": 0,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_cost_usd": 0.0,
+            for bucket, key in [(self._phase_totals, phase), (self._model_totals, model)]:
+                if key not in bucket:
+                    bucket[key] = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "total_cost_usd": 0.0}
+                bucket[key]["calls"] += 1
+                bucket[key]["input_tokens"] += input_tokens
+                bucket[key]["output_tokens"] += output_tokens
+                bucket[key]["total_cost_usd"] = round(bucket[key]["total_cost_usd"] + call_cost, 6)
+
+            # stream to JSONL immediately, then free the dict
+            if self._jsonl_path is not None:
+                entry = {
+                    "t": time.strftime("%H:%M:%S"),
+                    "phase": phase, "model": model,
+                    "in": input_tokens, "out": output_tokens,
+                    "cost": round(call_cost, 6),
+                    "total_calls": self._total_calls,
+                    "running_cost": round(self._total_cost_usd, 6),
                 }
-            m = models[c.model]
-            m["calls"]          += 1
-            m["input_tokens"]   += c.input_tokens
-            m["output_tokens"]  += c.output_tokens
-            m["total_cost_usd"] += c.total_cost
-        for m in models.values():
-            m["total_cost_usd"] = round(m["total_cost_usd"], 6)
-        return models
+                with self._jsonl_path.open("a") as f:
+                    f.write(json.dumps(entry) + "\n")
+                del entry  # written to disk — free immediately
 
     def total(self) -> float:
-        return sum(c.total_cost for c in self.calls)
+        return self._total_cost_usd
 
     # --- save to ../Costs/ ---
     def flush(self, extra: dict | None = None) -> Path:
-        """
-        Write a timestamped JSON to the Costs/ folder.
-
-        Returns the path of the saved file.
-        """
+        """Write a timestamped summary JSON to the Costs/ folder."""
         COSTS_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = COSTS_DIR / f"cost_{ts}.json"
-
-        total_in  = sum(c.input_tokens for c in self.calls)
-        total_out = sum(c.output_tokens for c in self.calls)
-        elapsed   = time.time() - self.start_time
+        elapsed = time.time() - self.start_time
 
         report = {
             "timestamp":        ts,
@@ -164,12 +158,12 @@ class CostTracker:
                 "Costs shown are API-equivalent estimates from the CLI. "
                 "No actual per-token charges on Max subscription."
             ),
-            "total_llm_calls":     len(self.calls),
-            "total_input_tokens":  total_in,
-            "total_output_tokens": total_out,
-            "grand_total_estimated_usd": round(self.total(), 6),
-            "breakdown_by_phase": self._by_phase(),
-            "breakdown_by_model": self._by_model(),
+            "total_llm_calls":           self._total_calls,
+            "total_input_tokens":        self._total_input_tokens,
+            "total_output_tokens":       self._total_output_tokens,
+            "grand_total_estimated_usd": round(self._total_cost_usd, 6),
+            "breakdown_by_phase":        self._phase_totals,
+            "breakdown_by_model":        self._model_totals,
         }
         if extra:
             report["run_info"] = extra

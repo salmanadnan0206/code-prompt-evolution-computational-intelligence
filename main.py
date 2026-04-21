@@ -51,16 +51,20 @@ def save_checkpoint(run_dir: Path, gen: int, population, stats):
 
 def evaluate_on_holdout(best_prompt: str, holdout: list[dict]) -> float:
     """Evaluate the best evolved prompt on the held-out test set."""
+    print(f"[HOLDOUT] starting evaluation on {len(holdout)} problems", flush=True)
     total = 0.0
     for i, prob in enumerate(holdout):
+        print(f"[HOLDOUT] {i+1}/{len(holdout)}  id={prob['id']}  calling Claude", flush=True)
         response = llm.generate_code(best_prompt, prob["question"])
         code = evaluator.extract_code(response)
+        del response
         score = evaluator.run_tests(
             code, prob["inputs"], prob["outputs"], config.EXEC_TIMEOUT,
         )
+        del code
         total += score
-        if (i + 1) % 50 == 0:
-            print(f"  holdout progress: {i+1}/{len(holdout)}")
+        print(f"[HOLDOUT] {i+1}/{len(holdout)}  id={prob['id']}  score={score:.2f}  running_avg={total/(i+1):.4f}", flush=True)
+    print(f"[HOLDOUT] done  mean={total/len(holdout):.4f}", flush=True)
     return total / len(holdout)
 
 
@@ -89,35 +93,41 @@ def _check_cli() -> None:
 
 
 def main():
+    print("[MAIN] ==== START ====", flush=True)
     # --- pre-flight checks ---
+    print("[MAIN] pre-flight: checking claude CLI", flush=True)
     _check_cli()
+    print("[MAIN] pre-flight: claude CLI OK", flush=True)
 
     if not config.APPS_TRAIN.exists() or not config.APPS_TEST.exists():
         print(f"ERROR: APPS dataset directories not found.")
         print(f"  Expected train: {config.APPS_TRAIN}")
         print(f"  Expected test:  {config.APPS_TEST}")
         sys.exit(1)
+    print("[MAIN] pre-flight: dataset dirs exist", flush=True)
 
     # --- load and split dataset ---
-    print("Loading 300 pre-selected Codeforces problems …")
+    print("[MAIN] loading 300 pre-selected Codeforces problems …", flush=True)
     all_problems = dataset.load_problems()
-    print(f"  Loaded {len(all_problems)} problems")
+    print(f"[MAIN] loaded {len(all_problems)} problems", flush=True)
 
     if len(all_problems) < config.EVOLUTION_SIZE + config.HOLDOUT_SIZE:
         print("ERROR: not enough problems after filtering.")
         sys.exit(1)
 
+    print("[MAIN] splitting into evolution / holdout", flush=True)
     evolution_pool, holdout, rest = dataset.split(
         all_problems, config.EVOLUTION_SIZE, config.HOLDOUT_SIZE, config.RANDOM_SEED,
     )
-    print(f"  Evolution pool : {len(evolution_pool)} problems")
-    print(f"  Held-out test  : {len(holdout)} problems")
-    print(f"  Remaining      : {len(rest)} problems")
+    print(f"[MAIN]   Evolution pool : {len(evolution_pool)} problems", flush=True)
+    print(f"[MAIN]   Held-out test  : {len(holdout)} problems", flush=True)
+    print(f"[MAIN]   Remaining      : {len(rest)} problems", flush=True)
 
     # --- create run directory ---
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = config.RESULTS_DIR / f"run_{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[MAIN] run directory created: {run_dir}", flush=True)
 
     # save config snapshot
     (run_dir / "config.json").write_text(json.dumps({
@@ -141,18 +151,26 @@ def main():
         json.dumps([p["id"] for p in evolution_pool])
     )
 
-    print(f"\nResults will be saved to: {run_dir}\n")
+    tracker.set_log_path(run_dir / "calls.jsonl")
+    llm.set_error_log_path(run_dir / "llm_errors.log")
+    print(f"[MAIN] cost tracker streaming to: {run_dir}/calls.jsonl", flush=True)
+    print(f"[MAIN] llm retry/error log: {run_dir}/llm_errors.log", flush=True)
+    print(f"\n[MAIN] results will be saved to: {run_dir}\n", flush=True)
 
     # --- run GA ---
+    print("[MAIN] ==== STARTING GA ====", flush=True)
     start = time.time()
     best, history = ga.run(
         seed_prompts=SEED_PROMPTS,
         problems=evolution_pool,
+        run_dir=run_dir,
         on_generation=lambda gen, pop, stats: save_checkpoint(run_dir, gen, pop, stats),
     )
     elapsed = time.time() - start
+    print(f"[MAIN] ==== GA COMPLETED in {elapsed/60:.1f} min ====", flush=True)
 
     # --- save results ---
+    print("[MAIN] saving history.json and best_prompt.txt", flush=True)
     (run_dir / "history.json").write_text(json.dumps(history, indent=2))
     (run_dir / "best_prompt.txt").write_text(best.prompt)
 
@@ -177,8 +195,10 @@ def main():
         "total_generations": config.GENERATIONS,
     }
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    print("[MAIN] summary.json saved", flush=True)
 
     # --- save cost report to ../Costs/ ---
+    print("[MAIN] flushing cost tracker report", flush=True)
     cost_path = tracker.flush(extra={
         "run_dir": str(run_dir),
         "best_fitness_evolution": best.fitness,
@@ -187,9 +207,10 @@ def main():
         "population_size": config.POPULATION_SIZE,
         "evolution_size": config.EVOLUTION_SIZE,
     })
-    print(f"\nCost report saved to: {cost_path}")
-    print(f"Estimated API-equivalent cost: ${tracker.total():.4f}  (no actual charge on Max subscription)")
-    print(f"\nAll results saved to: {run_dir}")
+    print(f"\n[MAIN] Cost report saved to: {cost_path}", flush=True)
+    print(f"[MAIN] Estimated API-equivalent cost: ${tracker.total():.4f}  (no actual charge on Max subscription)", flush=True)
+    print(f"\n[MAIN] All results saved to: {run_dir}", flush=True)
+    print("[MAIN] ==== END ====", flush=True)
 
 
 if __name__ == "__main__":

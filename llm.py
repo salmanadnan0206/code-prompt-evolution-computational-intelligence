@@ -14,12 +14,36 @@ NOTE: The CLI does not expose a --temperature flag. Code generation therefore
 """
 
 import json
+import random
 import re
 import subprocess
+import threading
 import time
+from pathlib import Path
 
 import config
 from cost_tracker import tracker
+
+# Set by main.py to enable persistent error logging for CLI retry/backoff events.
+_error_log_path: Path | None = None
+_error_log_lock = threading.Lock()
+
+
+def set_error_log_path(path: Path) -> None:
+    """Point llm module at a file for persistent CLI-error logs."""
+    global _error_log_path
+    _error_log_path = path
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _log_err(msg: str) -> None:
+    """Emit an LLM retry/error line to both stdout and (if set) the error log."""
+    line = f"[{time.strftime('%H:%M:%S')}] [LLM_ERR] {msg}"
+    print(line, flush=True)
+    if _error_log_path is not None:
+        with _error_log_lock:
+            with _error_log_path.open("a") as f:
+                f.write(line + "\n")
 
 
 def _call(
@@ -33,26 +57,36 @@ def _call(
     Invoke `claude -p` in non-interactive JSON mode.
 
     Handles:
-      - Rate-limit errors  → exponential back-off (30 s base)
-      - Transient errors   → short back-off (5 s base)
-      - Timeouts           → retry up to `retries` times
-      - Auth errors        → raises RuntimeError immediately (no retry)
+        - Rate-limit errors  → exponential back-off (30 s base)
+        - Transient errors   → short back-off (5 s base)
+        - Timeouts           → retry up to `retries` times
+        - Auth errors        → raises RuntimeError immediately (no retry)
 
     Logs token usage and cost to the global CostTracker.
     Returns the assistant text, or "" after all retries are exhausted.
     """
+    # Exhaustive disallow list — the `--tools ""` form doesn't actually disable tools.
+    # Even with --disallowed-tools, Claude keeps TRYING tools and eating turns. So
+    # we set --max-turns high enough that after several denied tool attempts, Claude
+    # gives up and responds with text. Empirically, num_turns=2 hits max_turns=3,
+    # so CLI counts user+assistant differently — bumping to 12 for safety.
+    _DISALLOWED_TOOLS = (
+        "Read,Write,Edit,MultiEdit,NotebookEdit,Glob,Grep,LS,"
+        "Bash,BashOutput,KillBash,WebFetch,WebSearch,"
+        "Task,TodoWrite,ExitPlanMode,Agent,Skill"
+    )
     cmd = [
         "claude",
         "-p", user,
         "--output-format", "json",
         "--model", model,
-        "--max-turns", "1",
-        "--tools", "",          # disable all built-in tools; pure text generation
+        "--max-turns", "12",
+        "--disallowed-tools", _DISALLOWED_TOOLS,
+        "--permission-mode", "plan",   # read-only mode, prevents side-effects
         "--system-prompt", system,
     ]
 
     for attempt in range(retries):
-        proc = None
         try:
             proc = subprocess.run(
                 cmd,
@@ -63,15 +97,24 @@ def _call(
 
             stdout = proc.stdout.strip()
 
-            # Empty stdout usually means a hard startup failure
+            # Empty stdout usually means CLI startup failure or silent throttling
             if not stdout:
-                stderr = proc.stderr.strip()
+                stderr = proc.stderr.strip()[:500]
+                returncode = proc.returncode
                 _check_auth_error(stderr)
                 if attempt < retries - 1:
-                    wait = 2 ** attempt * 5
-                    print(f"  [empty-output] stderr={stderr!r} | retry in {wait}s …")
+                    wait = 2 ** attempt * 5 + random.uniform(0, 3)
+                    _log_err(
+                        f"empty-output phase={phase} attempt={attempt+1}/{retries}  "
+                        f"returncode={returncode}  stderr={stderr!r}  "
+                        f"stdout_raw={proc.stdout[:200]!r} | retry in {wait:.1f}s"
+                    )
                     time.sleep(wait)
                     continue
+                _log_err(
+                    f"empty-output phase={phase} GIVING UP after {retries} attempts  "
+                    f"returncode={returncode}  stderr={stderr!r}"
+                )
                 return ""
 
             try:
@@ -79,15 +122,28 @@ def _call(
             except json.JSONDecodeError:
                 raw = stdout[:120]
                 if attempt < retries - 1:
-                    print(f"  [json-parse-error] raw={raw!r} | retry in 5s …")
-                    time.sleep(5)
+                    wait = 5 + random.uniform(0, 2)
+                    _log_err(f"json-parse-error phase={phase} attempt={attempt+1}/{retries}  raw={raw!r}  retry in {wait:.1f}s")
+                    time.sleep(wait)
                     continue
-                print(f"  [json-parse-error] giving up | raw={raw!r}")
+                _log_err(f"json-parse-error phase={phase} GIVING UP  raw={raw!r}")
                 return ""
 
             if data.get("is_error"):
                 result_msg = str(data.get("result", ""))
                 api_status = data.get("api_error_status")
+                stderr_tail = proc.stderr.strip()[-300:] if proc.stderr else ""
+
+                # === DIAGNOSTIC DUMP ===
+                # On every is_error, dump the full JSON keys + values so we can
+                # finally see what the CLI is actually returning.
+                raw_dump = json.dumps({k: (v if isinstance(v, (str, int, float, bool, type(None))) else type(v).__name__)
+                                       for k, v in data.items()})[:800]
+                _log_err(
+                    f"is_error_dump phase={phase} attempt={attempt+1}/{retries}  "
+                    f"api_status={api_status}  stderr_tail={stderr_tail!r}  "
+                    f"data={raw_dump}"
+                )
 
                 _check_auth_error(result_msg)  # raises immediately if auth issue
 
@@ -98,18 +154,18 @@ def _call(
                     or "too many" in result_msg.lower()
                 )
                 if is_rate_limit and attempt < retries - 1:
-                    wait = 2 ** attempt * 30
-                    print(f"  [rate-limit] waiting {wait}s …")
+                    wait = 2 ** attempt * 30 + random.uniform(0, 10)
+                    _log_err(f"rate-limit phase={phase} attempt={attempt+1}/{retries}  waiting {wait:.1f}s  status={api_status}")
                     time.sleep(wait)
                     continue
 
                 if attempt < retries - 1:
-                    wait = 2 ** attempt * 5
-                    print(f"  [error] {result_msg!r} | retry in {wait}s …")
+                    wait = 2 ** attempt * 5 + random.uniform(0, 3)
+                    _log_err(f"error phase={phase} attempt={attempt+1}/{retries}  msg={result_msg!r}  retry in {wait:.1f}s")
                     time.sleep(wait)
                     continue
 
-                print(f"  [error] {result_msg}")
+                _log_err(f"error phase={phase} GIVING UP  msg={result_msg!r}")
                 return ""
 
             # --- success path ---
@@ -132,9 +188,10 @@ def _call(
             return result_text
 
         except subprocess.TimeoutExpired:
-            print(f"  [timeout] attempt {attempt + 1}/{retries}")
+            wait = 10 + random.uniform(0, 5)
+            _log_err(f"timeout phase={phase} attempt={attempt+1}/{retries}  (subprocess exceeded {config.CLAUDE_CLI_TIMEOUT}s)  retry in {wait:.1f}s")
             if attempt < retries - 1:
-                time.sleep(10)
+                time.sleep(wait)
 
         except RuntimeError:
             raise  # auth errors bubble up immediately
@@ -163,6 +220,18 @@ def _check_auth_error(msg: str) -> None:
 # Code generation  (fitness evaluation)
 # ---------------------------------------------------------------------------
 
+# Anti-tool directive appended to every chromosome system prompt.
+# The chromosome itself is kept pure (for GA integrity) — this directive is only
+# added at call-time, so evolved prompts don't accumulate this text.
+_ANTI_TOOL_DIRECTIVE = (
+    "\n\n---\nCRITICAL OPERATIONAL CONSTRAINT (do not ignore):\n"
+    "You are running in a headless evaluation harness with NO filesystem access "
+    "and NO tool availability. Do NOT call Write, Edit, Bash, Read, Glob, Grep, "
+    "or any other tool — every tool call will be denied and waste your turns. "
+    "Respond with the C++ source code as plain text in your message. Nothing else."
+)
+
+
 def generate_code(system_prompt: str, question: str) -> str:
     """
     Ask the target LLM to solve a Codeforces problem with a complete C++ program.
@@ -176,12 +245,15 @@ def generate_code(system_prompt: str, question: str) -> str:
     user_msg = (
         f"{question}\n\n"
         "Write a complete, compilable C++ program that reads from stdin "
-        "and writes the answer to stdout."
+        "and writes the answer to stdout.\n\n"
+        "IMPORTANT: Respond with the C++ source code directly in a single "
+        "message. Do NOT attempt to use any tools (no Write, Edit, Bash, etc.). "
+        "Output the code inline as text only."
     )
     return _call(
         phase="fitness",
         model=config.TARGET_MODEL,
-        system=system_prompt,
+        system=system_prompt + _ANTI_TOOL_DIRECTIVE,
         user=user_msg,
     )
 
@@ -192,7 +264,8 @@ def generate_code(system_prompt: str, question: str) -> str:
 
 _CROSSOVER_SYSTEM = (
     "You merge coding-instruction prompts. Output ONLY the merged prompt — "
-    "no commentary, no labels, no markdown."
+    "no commentary, no labels, no markdown. "
+    "Do NOT use any tools. Respond with the merged prompt as plain text only."
 )
 
 _CROSSOVER_USER = """\
@@ -214,7 +287,7 @@ def crossover(prompt_a: str, prompt_b: str) -> str:
     return _call(
         phase="crossover",
         model=config.OPTIMIZER_MODEL,
-        system=_CROSSOVER_SYSTEM,
+        system=_CROSSOVER_SYSTEM + _ANTI_TOOL_DIRECTIVE,
         user=_CROSSOVER_USER.format(parent_a=prompt_a, parent_b=prompt_b),
     ).strip()
 
@@ -225,7 +298,8 @@ def crossover(prompt_a: str, prompt_b: str) -> str:
 
 _MUT_SYSTEM = (
     "You edit coding-instruction prompts. Output ONLY the modified prompt — "
-    "no commentary, no labels, no markdown."
+    "no commentary, no labels, no markdown. "
+    "Do NOT use any tools. Respond with the modified prompt as plain text only."
 )
 
 
@@ -241,7 +315,7 @@ def mutate_inject(prompt: str) -> str:
     return _call(
         phase="mutate_inject",
         model=config.OPTIMIZER_MODEL,
-        system=_MUT_SYSTEM,
+        system=_MUT_SYSTEM + _ANTI_TOOL_DIRECTIVE,
         user=user,
     ).strip()
 
@@ -260,7 +334,7 @@ def mutate_delete(prompt: str) -> str:
     return _call(
         phase="mutate_delete",
         model=config.OPTIMIZER_MODEL,
-        system=_MUT_SYSTEM,
+        system=_MUT_SYSTEM + _ANTI_TOOL_DIRECTIVE,
         user=user,
     ).strip()
 
@@ -276,6 +350,6 @@ def mutate_rephrase(prompt: str) -> str:
     return _call(
         phase="mutate_rephrase",
         model=config.OPTIMIZER_MODEL,
-        system=_MUT_SYSTEM,
+        system=_MUT_SYSTEM + _ANTI_TOOL_DIRECTIVE,
         user=user,
     ).strip()
