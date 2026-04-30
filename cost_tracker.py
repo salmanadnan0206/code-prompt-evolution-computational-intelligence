@@ -1,17 +1,3 @@
-"""
-cost_tracker.py — Track every LLM call's token usage and estimated cost.
-
-Every time main.py runs, a new JSON file is saved to ../Costs/ with a
-complete breakdown: per-call tokens, per-phase subtotals, and grand total.
-
-When running via the Claude Code CLI (subscription mode), costs reported are
-the API-equivalent estimates returned by the CLI — no actual charges are made
-beyond the flat subscription fee.
-
-Pricing source: https://docs.anthropic.com/en/docs/about-claude/pricing
-                 (fetched April 2026)
-"""
-
 import json
 import threading
 import time
@@ -19,42 +5,31 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Official Anthropic pricing (USD per 1 million tokens) — April 2026
-# ---------------------------------------------------------------------------
 PRICING = {
-    # model_id: (input_$/MTok, output_$/MTok)
-    "claude-haiku-4-5-20251001": (1.00,  5.00),
-    "claude-haiku-3-5-20241022": (0.80,  4.00),
-    "claude-haiku-3-20240307":   (0.25,  1.25),
-    "claude-sonnet-4-6":         (3.00, 15.00),
-    "claude-sonnet-4-5-20250514":(3.00, 15.00),
-    "claude-sonnet-4-20250514":  (3.00, 15.00),
-    "claude-opus-4-6":           (5.00, 25.00),
-
-    # Batch API (50 % discount) — keys suffixed with :batch
-    "claude-haiku-4-5-20251001:batch": (0.50,  2.50),
-    "claude-sonnet-4-6:batch":         (1.50,  7.50),
+    "gemini-2.5-flash":  (0.15,  0.60),
+    "gemini-2.5-pro":    (1.25, 10.00),
+    "gemini-2.0-flash":  (0.10,  0.40),
+    "gemini-2.0-flash-001": (0.10, 0.40),
+    "claude-haiku-4-5@20251001":  (1.00,  5.00),
+    "claude-haiku-4-5-20251001":  (1.00,  5.00),
+    "claude-sonnet-4-6":          (3.00, 15.00),
 }
 
 COSTS_DIR = Path(__file__).parent / "Costs"
 
 
-# ---------------------------------------------------------------------------
-# Single-call record
-# ---------------------------------------------------------------------------
 @dataclass
 class CallRecord:
-    phase: str          # "fitness", "crossover", "mutate_inject", etc.
+    phase: str
     model: str
     input_tokens: int
     output_tokens: int
-    cost_usd: float | None = None  # when set, used directly instead of pricing table
+    cost_usd: float | None = None
 
     @property
     def input_cost(self) -> float:
         if self.cost_usd is not None:
-            return 0.0  # cost rolled into total_cost via cost_usd
+            return 0.0
         rate_in, _ = PRICING.get(self.model, (0, 0))
         return self.input_tokens * rate_in / 1_000_000
 
@@ -72,17 +47,14 @@ class CallRecord:
         return self.input_cost + self.output_cost
 
 
-# ---------------------------------------------------------------------------
-# Run-level tracker
-# ---------------------------------------------------------------------------
 class CostTracker:
-    """Streams each call to a JSONL file immediately; keeps only running totals in memory."""
 
     def __init__(self):
         self.start_time: float = time.time()
         self._jsonl_path: Path | None = None
+        self._live_path: Path | None = None
+        self._costs_live_path: Path | None = None
         self._lock = threading.Lock()
-        # running totals only — no per-call list kept in memory
         self._total_calls: int = 0
         self._total_input_tokens: int = 0
         self._total_output_tokens: int = 0
@@ -91,27 +63,67 @@ class CostTracker:
         self._model_totals: dict = {}
 
     def set_log_path(self, path: Path) -> None:
-        """Point the tracker at a JSONL file for streaming writes."""
         self._jsonl_path = path
         path.parent.mkdir(parents=True, exist_ok=True)
 
+    def set_live_path(self, path: Path) -> None:
+        self._live_path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    def set_costs_live_path(self, path: Path) -> None:
+        self._costs_live_path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    def restore_from_jsonl(self, path: Path) -> int:
+        if not path.exists():
+            return 0
+        loaded = 0
+        with self._lock:
+            with path.open() as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    phase = entry.get("phase", "unknown")
+                    model = entry.get("model", "unknown")
+                    in_tok  = entry.get("in", 0)
+                    out_tok = entry.get("out", 0)
+                    cost    = entry.get("cost", 0.0)
+                    self._total_calls += 1
+                    self._total_input_tokens  += in_tok
+                    self._total_output_tokens += out_tok
+                    self._total_cost_usd      += cost
+                    for bucket, key in [(self._phase_totals, phase), (self._model_totals, model)]:
+                        if key not in bucket:
+                            bucket[key] = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "total_cost_usd": 0.0}
+                        bucket[key]["calls"] += 1
+                        bucket[key]["input_tokens"]  += in_tok
+                        bucket[key]["output_tokens"] += out_tok
+                        bucket[key]["total_cost_usd"] = round(bucket[key]["total_cost_usd"] + cost, 6)
+                    loaded += 1
+            if loaded and self._live_path is not None:
+                self._write_summary(self._live_path)
+            if loaded and self._costs_live_path is not None:
+                self._write_summary(self._costs_live_path)
+        return loaded
+
     def record(self, phase: str, model: str,
-                input_tokens: int = 0, output_tokens: int = 0,
-                cost_usd: float | None = None):
-        """
-        Log one LLM call — written to disk immediately, not kept in memory.
-        Thread-safe: protected by internal lock.
-        """
-        rec = CallRecord(
-            phase=phase, model=model,
-            input_tokens=input_tokens, output_tokens=output_tokens,
-            cost_usd=cost_usd,
-        )
+               input_tokens: int = 0, output_tokens: int = 0,
+               cost_usd: float | None = None,
+               extra: dict | None = None):
+        rec = CallRecord(phase=phase, model=model,
+                         input_tokens=input_tokens, output_tokens=output_tokens,
+                         cost_usd=cost_usd)
         call_cost = rec.total_cost
-        del rec  # no longer needed — totals extracted
+        del rec
+
+        # print(f"record called: phase={phase} cost={call_cost:.5f}")
 
         with self._lock:
-            # update running totals
             self._total_calls += 1
             self._total_input_tokens += input_tokens
             self._total_output_tokens += output_tokens
@@ -125,7 +137,6 @@ class CostTracker:
                 bucket[key]["output_tokens"] += output_tokens
                 bucket[key]["total_cost_usd"] = round(bucket[key]["total_cost_usd"] + call_cost, 6)
 
-            # stream to JSONL immediately, then free the dict
             if self._jsonl_path is not None:
                 entry = {
                     "t": time.strftime("%H:%M:%S"),
@@ -135,29 +146,25 @@ class CostTracker:
                     "total_calls": self._total_calls,
                     "running_cost": round(self._total_cost_usd, 6),
                 }
+                if extra:
+                    entry.update(extra)
                 with self._jsonl_path.open("a") as f:
                     f.write(json.dumps(entry) + "\n")
-                del entry  # written to disk — free immediately
+                del entry
+
+            if self._live_path is not None:
+                self._write_summary(self._live_path)
+            if self._costs_live_path is not None:
+                self._write_summary(self._costs_live_path)
 
     def total(self) -> float:
         return self._total_cost_usd
 
-    # --- save to ../Costs/ ---
-    def flush(self, extra: dict | None = None) -> Path:
-        """Write a timestamped summary JSON to the Costs/ folder."""
-        COSTS_DIR.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = COSTS_DIR / f"cost_{ts}.json"
-        elapsed = time.time() - self.start_time
-
+    def _write_summary(self, path: Path, extra: dict | None = None) -> None:
         report = {
-            "timestamp":        ts,
-            "elapsed_seconds":  round(elapsed, 1),
-            "mode":             "claude-code-cli (subscription)",
-            "note":             (
-                "Costs shown are API-equivalent estimates from the CLI. "
-                "No actual per-token charges on Max subscription."
-            ),
+            "timestamp":                 time.strftime("%Y%m%d_%H%M%S"),
+            "elapsed_seconds":           round(time.time() - self.start_time, 1),
+            "mode":                      "vertex-ai-realtime",
             "total_llm_calls":           self._total_calls,
             "total_input_tokens":        self._total_input_tokens,
             "total_output_tokens":       self._total_output_tokens,
@@ -167,12 +174,18 @@ class CostTracker:
         }
         if extra:
             report["run_info"] = extra
-
         path.write_text(json.dumps(report, indent=2))
+
+    def flush(self, extra: dict | None = None, path: Path | None = None) -> Path:
+        if path is None:
+            COSTS_DIR.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = COSTS_DIR / f"cost_{ts}.json"
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            self._write_summary(path, extra)
         return path
 
 
-# ---------------------------------------------------------------------------
-# Module-level singleton  (imported by llm.py)
-# ---------------------------------------------------------------------------
 tracker = CostTracker()

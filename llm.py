@@ -1,44 +1,30 @@
-"""
-llm.py — All LLM calls via Claude Code CLI (claude -p).
-
-Uses the Claude.ai subscription (Max plan) instead of the Anthropic API SDK,
-so no per-token charges are incurred beyond the subscription cost.
-
-Two models:
-    TARGET_MODEL    — generates code (fitness evaluation)
-    OPTIMIZER_MODEL — crossover and mutation meta-operations
-
-NOTE: The CLI does not expose a --temperature flag. Code generation therefore
-      runs at the model's default temperature instead of the configured 0.0.
-      Fitness scores may vary slightly between runs as a result.
-"""
-
 import json
 import random
 import re
-import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import Optional
 
 import config
-from cost_tracker import tracker
+from cost_tracker import tracker, PRICING
 
-# Set by main.py to enable persistent error logging for CLI retry/backoff events.
+
+class LLMCallError(RuntimeError):
+    pass
+
+
 _error_log_path: Path | None = None
 _error_log_lock = threading.Lock()
 
 
 def set_error_log_path(path: Path) -> None:
-    """Point llm module at a file for persistent CLI-error logs."""
     global _error_log_path
     _error_log_path = path
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _log_err(msg: str) -> None:
-    """Emit an LLM retry/error line to both stdout and (if set) the error log."""
-    line = f"[{time.strftime('%H:%M:%S')}] [LLM_ERR] {msg}"
+def _write_log(line: str) -> None:
     print(line, flush=True)
     if _error_log_path is not None:
         with _error_log_lock:
@@ -46,232 +32,225 @@ def _log_err(msg: str) -> None:
                 f.write(line + "\n")
 
 
-def _call(
-    phase: str,
-    model: str,
-    system: str,
-    user: str,
-    retries: int = 4,
-) -> str:
-    """
-    Invoke `claude -p` in non-interactive JSON mode.
+def _log_ok(msg: str) -> None:
+    _write_log(f"[{time.strftime('%H:%M:%S')}] [LLM OK]   {msg}")
 
-    Handles:
-        - Rate-limit errors  → exponential back-off (30 s base)
-        - Transient errors   → short back-off (5 s base)
-        - Timeouts           → retry up to `retries` times
-        - Auth errors        → raises RuntimeError immediately (no retry)
+def _log_warn(msg: str) -> None:
+    _write_log(f"[{time.strftime('%H:%M:%S')}] [LLM WARN] {msg}")
 
-    Logs token usage and cost to the global CostTracker.
-    Returns the assistant text, or "" after all retries are exhausted.
-    """
-    # Exhaustive disallow list — the `--tools ""` form doesn't actually disable tools.
-    # Even with --disallowed-tools, Claude keeps TRYING tools and eating turns. So
-    # we set --max-turns high enough that after several denied tool attempts, Claude
-    # gives up and responds with text. Empirically, num_turns=2 hits max_turns=3,
-    # so CLI counts user+assistant differently — bumping to 12 for safety.
-    _DISALLOWED_TOOLS = (
-        "Read,Write,Edit,MultiEdit,NotebookEdit,Glob,Grep,LS,"
-        "Bash,BashOutput,KillBash,WebFetch,WebSearch,"
-        "Task,TodoWrite,ExitPlanMode,Agent,Skill"
-    )
-    cmd = [
-        "claude",
-        "-p", user,
-        "--output-format", "json",
-        "--model", model,
-        "--max-turns", "12",
-        "--disallowed-tools", _DISALLOWED_TOOLS,
-        "--permission-mode", "plan",   # read-only mode, prevents side-effects
-        "--system-prompt", system,
-    ]
-
-    for attempt in range(retries):
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=config.CLAUDE_CLI_TIMEOUT,
-            )
-
-            stdout = proc.stdout.strip()
-
-            # Empty stdout usually means CLI startup failure or silent throttling
-            if not stdout:
-                stderr = proc.stderr.strip()[:500]
-                returncode = proc.returncode
-                _check_auth_error(stderr)
-                if attempt < retries - 1:
-                    wait = 2 ** attempt * 5 + random.uniform(0, 3)
-                    _log_err(
-                        f"empty-output phase={phase} attempt={attempt+1}/{retries}  "
-                        f"returncode={returncode}  stderr={stderr!r}  "
-                        f"stdout_raw={proc.stdout[:200]!r} | retry in {wait:.1f}s"
-                    )
-                    time.sleep(wait)
-                    continue
-                _log_err(
-                    f"empty-output phase={phase} GIVING UP after {retries} attempts  "
-                    f"returncode={returncode}  stderr={stderr!r}"
-                )
-                return ""
-
-            try:
-                data = json.loads(stdout)
-            except json.JSONDecodeError:
-                raw = stdout[:120]
-                if attempt < retries - 1:
-                    wait = 5 + random.uniform(0, 2)
-                    _log_err(f"json-parse-error phase={phase} attempt={attempt+1}/{retries}  raw={raw!r}  retry in {wait:.1f}s")
-                    time.sleep(wait)
-                    continue
-                _log_err(f"json-parse-error phase={phase} GIVING UP  raw={raw!r}")
-                return ""
-
-            if data.get("is_error"):
-                result_msg = str(data.get("result", ""))
-                api_status = data.get("api_error_status")
-                stderr_tail = proc.stderr.strip()[-300:] if proc.stderr else ""
-
-                # === DIAGNOSTIC DUMP ===
-                # On every is_error, dump the full JSON keys + values so we can
-                # finally see what the CLI is actually returning.
-                raw_dump = json.dumps({k: (v if isinstance(v, (str, int, float, bool, type(None))) else type(v).__name__)
-                                       for k, v in data.items()})[:800]
-                _log_err(
-                    f"is_error_dump phase={phase} attempt={attempt+1}/{retries}  "
-                    f"api_status={api_status}  stderr_tail={stderr_tail!r}  "
-                    f"data={raw_dump}"
-                )
-
-                _check_auth_error(result_msg)  # raises immediately if auth issue
-
-                # Rate limit: HTTP 429 or message contains "rate"/"limit"
-                is_rate_limit = (
-                    api_status == 429
-                    or "rate" in result_msg.lower()
-                    or "too many" in result_msg.lower()
-                )
-                if is_rate_limit and attempt < retries - 1:
-                    wait = 2 ** attempt * 30 + random.uniform(0, 10)
-                    _log_err(f"rate-limit phase={phase} attempt={attempt+1}/{retries}  waiting {wait:.1f}s  status={api_status}")
-                    time.sleep(wait)
-                    continue
-
-                if attempt < retries - 1:
-                    wait = 2 ** attempt * 5 + random.uniform(0, 3)
-                    _log_err(f"error phase={phase} attempt={attempt+1}/{retries}  msg={result_msg!r}  retry in {wait:.1f}s")
-                    time.sleep(wait)
-                    continue
-
-                _log_err(f"error phase={phase} GIVING UP  msg={result_msg!r}")
-                return ""
-
-            # --- success path ---
-            result_text = data.get("result", "")
-
-            # Extract per-model token stats (most accurate source)
-            model_usage = data.get("modelUsage", {}).get(model, {})
-            input_tokens  = model_usage.get("inputTokens", 0)
-            output_tokens = model_usage.get("outputTokens", 0)
-            cost_usd      = model_usage.get("costUSD", data.get("total_cost_usd", 0.0))
-
-            tracker.record(
-                phase=phase,
-                model=model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost_usd=cost_usd,
-            )
-
-            return result_text
-
-        except subprocess.TimeoutExpired:
-            wait = 10 + random.uniform(0, 5)
-            _log_err(f"timeout phase={phase} attempt={attempt+1}/{retries}  (subprocess exceeded {config.CLAUDE_CLI_TIMEOUT}s)  retry in {wait:.1f}s")
-            if attempt < retries - 1:
-                time.sleep(wait)
-
-        except RuntimeError:
-            raise  # auth errors bubble up immediately
-
-        except FileNotFoundError:
-            raise RuntimeError(
-                "`claude` command not found on PATH. "
-                "Install Claude Code: https://claude.ai/code"
-            )
-
-    return ""
+def _log_err(msg: str) -> None:
+    _write_log(f"[{time.strftime('%H:%M:%S')}] [LLM ERR]  {msg}")
 
 
-def _check_auth_error(msg: str) -> None:
-    """Raise RuntimeError immediately if `msg` signals an authentication failure."""
-    lower = msg.lower()
-    if "not logged in" in lower or "please run /login" in lower:
-        raise RuntimeError(
-            "Claude CLI is not authenticated.\n"
-            "Run:  claude auth login\n"
-            "Then re-run this script."
-        )
+_CODE_GEN_DIRECTIVE = (
+    "\n\n"
+    "ABSOLUTE OUTPUT REQUIREMENT — NO EXCEPTIONS:\n"
+    "Your entire response must consist of ONLY the raw C++ source code — one complete file, nothing else. Use C++23.\n"
+    "FORBIDDEN:\n"
+    "  • Backtick code fences of any form (no ```, no `, no 'cpp' or 'c++' tags)\n"
+    "  • Markdown formatting of any kind\n"
+    "  • Any text before the code: no explanations, no 'Here is...', no preamble\n"
+    "  • Any text after the code: no summaries, no notes\n"
+    "The FIRST character of your response must be the first character of the C++ source code.\n"
+    "The LAST character of your response must be the last character of the C++ source code.\n"
+    "Output one complete, single-file C++ program and absolutely nothing else."
+)
 
-
-# ---------------------------------------------------------------------------
-# Code generation  (fitness evaluation)
-# ---------------------------------------------------------------------------
-
-# Anti-tool directive appended to every chromosome system prompt.
-# The chromosome itself is kept pure (for GA integrity) — this directive is only
-# added at call-time, so evolved prompts don't accumulate this text.
-_ANTI_TOOL_DIRECTIVE = (
-    "\n\n---\nCRITICAL OPERATIONAL CONSTRAINT (do not ignore):\n"
-    "You are running in a headless evaluation harness with NO filesystem access "
-    "and NO tool availability. Do NOT call Write, Edit, Bash, Read, Glob, Grep, "
-    "or any other tool — every tool call will be denied and waste your turns. "
-    "Respond with the C++ source code as plain text in your message. Nothing else."
+_OPERATOR_DIRECTIVE = (
+    "\n\n"
+    "ABSOLUTE OUTPUT REQUIREMENT — NO EXCEPTIONS:\n"
+    "Your entire response must consist of ONLY the plain text of the instruction prompt — nothing else.\n"
+    "FORBIDDEN:\n"
+    "  • Backtick fences or code blocks\n"
+    "  • Markdown formatting\n"
+    "  • Labels, headers, meta-commentary, or explanations\n"
+    "The FIRST character of your response must be the first character of the prompt text.\n"
+    "The LAST character must be the last character of the prompt text."
 )
 
 
-def generate_code(system_prompt: str, question: str) -> str:
-    """
-    Ask the target LLM to solve a Codeforces problem with a complete C++ program.
-
-    Arguments:
-        system_prompt — the GA chromosome (instruction being evolved)
-        question      — the problem statement text
-
-    Returns the raw LLM response (code extraction happens in evaluator.py).
-    """
-    user_msg = (
+def _build_user_msg(question: str) -> str:
+    return (
         f"{question}\n\n"
-        "Write a complete, compilable C++ program that reads from stdin "
-        "and writes the answer to stdout.\n\n"
-        "IMPORTANT: Respond with the C++ source code directly in a single "
-        "message. Do NOT attempt to use any tools (no Write, Edit, Bash, etc.). "
-        "Output the code inline as text only."
+        "Write a complete, compilable C++ program that reads from stdin and writes "
+        "the answer to stdout. Include main(). Compile target: g++ -O2 -std=c++23.\n\n"
+        "DO NOT write any explanation, analysis, or reasoning.\n"
+        "DO NOT start with 'Looking at', 'I need to', or any English text.\n"
+        "Your response must begin with #include or int main — nothing before it."
     )
-    return _call(
+
+
+_api_client = None
+_api_lock = threading.Lock()
+
+
+def _get_client():
+    global _api_client
+    if _api_client is not None:
+        return _api_client
+
+    with _api_lock:
+        if _api_client is not None:
+            return _api_client
+
+        try:
+            from google import genai
+            from google.oauth2 import service_account as _sa
+        except ImportError:
+            raise RuntimeError("google-genai or google-auth not installed. Run: pip install google-genai google-auth")
+
+        sa_path = config.SERVICE_ACCOUNT_PATH
+        if not sa_path.exists():
+            raise RuntimeError(f"Service account file not found: {sa_path}")
+
+        info = json.loads(sa_path.read_text())
+        project = info.get("project_id", "")
+        if not project:
+            raise RuntimeError(f"'project_id' not found in {sa_path}.")
+
+        creds = _sa.Credentials.from_service_account_info(
+            info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+
+        from google.genai import types as _gt
+        _api_client = genai.Client(
+            vertexai=True,
+            project=project,
+            location=config.GCP_REGION,
+            credentials=creds,
+            http_options=_gt.HttpOptions(timeout=120_000),
+        )
+
+        print(f"[{time.strftime('%H:%M:%S')}] [LLM]  client ready  project={project}  region={config.GCP_REGION}", flush=True)
+
+    return _api_client
+
+
+_pricing = {
+    "gemini-2.5-flash": (0.15, 0.60),
+    "gemini-2.5-pro":   (1.25, 10.00),
+    "gemini-2.0-flash": (0.10, 0.40),
+}
+
+
+def _cost(model: str, in_tok: int, out_tok: int) -> float:
+    short = model.split("/")[-1]
+    ri, ro = _pricing.get(short, (0.0, 0.0))
+    return in_tok * ri / 1_000_000 + out_tok * ro / 1_000_000
+
+
+def _call_api(phase: str, model: str, system: str, user: str,
+              max_tokens: int, retries: int = 10) -> Optional[str]:
+    from google.genai import types as _gt
+
+    try:
+        client = _get_client()
+    except RuntimeError:
+        raise
+
+    for attempt in range(retries):
+        t0 = time.monotonic()
+        try:
+            is_fit = (phase == "fitness")
+            resp = client.models.generate_content(
+                model=model,
+                contents=user,
+                config=_gt.GenerateContentConfig(
+                    system_instruction=system,
+                    max_output_tokens=max_tokens,
+                    temperature=0.0 if is_fit else 0.7,
+                    thinking_config=_gt.ThinkingConfig(
+                        thinking_budget=512 if is_fit else 2048,
+                    ),
+                ),
+            )
+            elapsed = round(time.monotonic() - t0, 2)
+            text = resp.text or ""
+
+            # thinking tokens billed at output rate but counted separately
+            usage = resp.usage_metadata
+            in_tok  = getattr(usage, "prompt_token_count",     0) or 0
+            out_tok = getattr(usage, "candidates_token_count", 0) or 0
+            think   = getattr(usage, "thoughts_token_count",   0) or 0
+            out_tok += think
+            cost = _cost(model, in_tok, out_tok)
+
+            tracker.record(phase=phase, model=model,
+                           input_tokens=in_tok, output_tokens=out_tok, cost_usd=cost)
+
+            if not text.strip():
+                if attempt < retries - 1:
+                    wait = 5 * (2 ** attempt) + random.uniform(0, 3)
+                    _log_warn(f"empty response  phase={phase}  attempt={attempt+1}/{retries}  retry in {wait:.1f}s")
+                    time.sleep(wait)
+                    continue
+                _log_err(f"empty response  phase={phase}  GIVING UP")
+                return ""
+
+            _log_ok(
+                f"phase={phase}  model={model}  attempt={attempt+1}  "
+                f"elapsed={elapsed}s  in={in_tok} out={out_tok} think={think}  "
+                f"cost=${cost:.5f}  running=${tracker.total():.4f}"
+            )
+            return text
+
+        except Exception as exc:
+            elapsed = round(time.monotonic() - t0, 2)
+            s = str(exc)
+            is_rate    = "429" in s or "RESOURCE_EXHAUSTED" in s or "quota" in s.lower()
+            is_server  = "500" in s or "503" in s or "UNAVAILABLE" in s
+            is_timeout = "timeout" in s.lower() or "timed out" in s.lower() or "timeout" in type(exc).__name__.lower()
+
+            # print(f"api error attempt={attempt}: {s[:80]}")
+
+            if is_timeout or is_rate or is_server:
+                wait = 5 * (2 ** attempt) + random.uniform(0, 3)
+                tag = "timeout" if is_timeout else ("rate_limit" if is_rate else "server_error")
+                _log_warn(f"{tag}  phase={phase}  attempt={attempt+1}/{retries}  wait={wait:.0f}s")
+                if attempt < retries - 1:
+                    time.sleep(wait)
+                continue
+
+            _log_err(f"{type(exc).__name__}  phase={phase}  attempt={attempt+1}/{retries}  msg={s[:150]}")
+            if attempt < retries - 1:
+                wait = 5 * (2 ** attempt) + random.uniform(0, 3)
+                time.sleep(wait)
+
+    _log_err(f"all retries exhausted  phase={phase}  model={model}")
+    return None
+
+
+def _call(phase: str, model: str, system: str, user: str,
+          retries: int = 10, api_max_tokens: int = 2048) -> Optional[str]:
+    return _call_api(phase, model, system, user, api_max_tokens, retries)
+
+
+def generate_code(system_prompt: str, question: str) -> str:
+    msg = _build_user_msg(question)
+    result = _call(
         phase="fitness",
         model=config.TARGET_MODEL,
-        system=system_prompt + _ANTI_TOOL_DIRECTIVE,
-        user=user_msg,
+        system=system_prompt + _CODE_GEN_DIRECTIVE,
+        user=msg,
+        api_max_tokens=config.API_FALLBACK_MAX_TOKENS_CODE,
     )
+    if result is None:
+        raise LLMCallError(f"generate_code: all retries failed (model={config.TARGET_MODEL})")
+    return result
 
 
-# ---------------------------------------------------------------------------
-# Crossover  (LLM-mediated merge of two parent prompts)
-# ---------------------------------------------------------------------------
+def run_fitness_batch(requests):
+    raise NotImplementedError("Batch API not used — realtime only.")
+
 
 _CROSSOVER_SYSTEM = (
     "You merge coding-instruction prompts. Output ONLY the merged prompt — "
-    "no commentary, no labels, no markdown. "
-    "Do NOT use any tools. Respond with the merged prompt as plain text only."
+    "no commentary, no labels, no markdown."
 )
 
 _CROSSOVER_USER = """\
 Combine these two coding-instruction prompts into one coherent prompt.
-Preserve the strongest strategies from each parent (e.g. edge-case thinking
-from one, algorithm identification from the other).
+Preserve the strongest strategies from each parent.
 Do not simply concatenate — produce a unified instruction paragraph.
 
 --- Parent A ---
@@ -283,73 +262,85 @@ Do not simply concatenate — produce a unified instruction paragraph.
 
 
 def crossover(prompt_a: str, prompt_b: str) -> str:
-    """Merge two parent prompts into one offspring via the optimizer LLM."""
-    return _call(
+    result = _call(
         phase="crossover",
         model=config.OPTIMIZER_MODEL,
-        system=_CROSSOVER_SYSTEM + _ANTI_TOOL_DIRECTIVE,
+        system=_CROSSOVER_SYSTEM + _OPERATOR_DIRECTIVE,
         user=_CROSSOVER_USER.format(parent_a=prompt_a, parent_b=prompt_b),
-    ).strip()
+        api_max_tokens=config.API_FALLBACK_MAX_TOKENS_OPS,
+    )
+    return (result or "").strip()
 
-
-# ---------------------------------------------------------------------------
-# Mutation  (three independent operators)
-# ---------------------------------------------------------------------------
 
 _MUT_SYSTEM = (
     "You edit coding-instruction prompts. Output ONLY the modified prompt — "
-    "no commentary, no labels, no markdown. "
-    "Do NOT use any tools. Respond with the modified prompt as plain text only."
+    "no commentary, no labels, no markdown."
 )
 
 
-def mutate_inject(prompt: str) -> str:
-    """Add one new instructional strategy to the prompt."""
+def mutate_inject(prompt: str, failure_examples: list | None = None) -> str:
+    hint = ""
+    if failure_examples:
+        lines = []
+        for f in failure_examples[:3]:
+            line = f"  - Problem {f['problem_id']} (rating {f.get('rating','?')}): reason={f['reason']}"
+            if f.get("compile_error"):
+                line += f", compile_error={f['compile_error'][:80]!r}"
+            elif f.get("expected"):
+                line += f", expected={f['expected'][:60]!r}, actual={f['actual'][:60]!r}"
+            lines.append(line)
+        hint = (
+            "\n\nRecent failure examples (address at least one):\n"
+            + "\n".join(lines)
+            + "\nAdd a strategy that targets these specific failure patterns."
+        )
+
     user = (
         "Add one new, specific coding strategy to this instruction prompt. "
-        "Examples of strategies: 'validate your output against the examples', "
-        "'consider time complexity', 'check for off-by-one errors'. "
-        "Output only the modified prompt.\n\n"
-        f"Prompt:\n{prompt}"
+        "Examples: 'validate your output against the examples', "
+        "'consider time complexity', 'check for off-by-one errors'."
+        f"{hint}\n\nOutput only the modified prompt.\n\nPrompt:\n{prompt}"
     )
-    return _call(
+    result = _call(
         phase="mutate_inject",
         model=config.OPTIMIZER_MODEL,
-        system=_MUT_SYSTEM + _ANTI_TOOL_DIRECTIVE,
+        system=_MUT_SYSTEM + _OPERATOR_DIRECTIVE,
         user=user,
-    ).strip()
+        api_max_tokens=config.API_FALLBACK_MAX_TOKENS_OPS,
+    )
+    return (result or "").strip()
 
 
 def mutate_delete(prompt: str) -> str:
-    """Remove one sentence from the prompt to make it leaner."""
     sentences = re.split(r"(?<=[.!?])\s+", prompt)
     if len(sentences) <= 1:
-        return prompt  # nothing to delete
+        return prompt
     user = (
         "Remove one sentence from this instruction prompt — the one that "
         "contributes the least to code-generation quality. Keep everything "
-        "else verbatim. Output only the modified prompt.\n\n"
-        f"Prompt:\n{prompt}"
-    )
-    return _call(
+        "else verbatim. Output only the modified prompt.\n\nPrompt:\n{prompt}"
+    ).format(prompt=prompt)
+    result = _call(
         phase="mutate_delete",
         model=config.OPTIMIZER_MODEL,
-        system=_MUT_SYSTEM + _ANTI_TOOL_DIRECTIVE,
+        system=_MUT_SYSTEM + _OPERATOR_DIRECTIVE,
         user=user,
-    ).strip()
+        api_max_tokens=config.API_FALLBACK_MAX_TOKENS_OPS,
+    )
+    return (result or "").strip()
 
 
 def mutate_rephrase(prompt: str) -> str:
-    """Rephrase the prompt without changing its meaning."""
     user = (
         "Rephrase this instruction prompt using different words, but keep "
         "the same meaning and all the same strategies. "
-        "Output only the rephrased prompt.\n\n"
-        f"Prompt:\n{prompt}"
-    )
-    return _call(
+        "Output only the rephrased prompt.\n\nPrompt:\n{prompt}"
+    ).format(prompt=prompt)
+    result = _call(
         phase="mutate_rephrase",
         model=config.OPTIMIZER_MODEL,
-        system=_MUT_SYSTEM + _ANTI_TOOL_DIRECTIVE,
+        system=_MUT_SYSTEM + _OPERATOR_DIRECTIVE,
         user=user,
-    ).strip()
+        api_max_tokens=config.API_FALLBACK_MAX_TOKENS_OPS,
+    )
+    return (result or "").strip()

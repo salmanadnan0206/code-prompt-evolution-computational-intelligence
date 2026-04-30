@@ -1,1 +1,28 @@
-datasets>=2.0.0
+# =============================================================================
+# Python package requirements for the GA Prompt Evolution project
+# =============================================================================
+#
+# RUNTIME
+# -------
+anthropic[vertex]>=0.40.0  # Anthropic SDK with Vertex AI support
+                           # Install: pip install "anthropic[vertex]"
+google-auth>=2.0.0         # Google Cloud auth (service account JSON)
+                           # Install: pip install google-auth
+#
+# All other imports are Python standard library:
+#   json, subprocess, threading, time, random, os, re, uuid, tempfile,
+#   sys, pathlib, dataclasses, concurrent.futures, typing, datetime
+#
+# SYSTEM DEPENDENCIES (not installable via pip — must be installed separately)
+# -----------------------------------------------------------------------------
+#   claude          Claude Code CLI  — https://claude.ai/code
+#                   Requires a Claude.ai Max subscription (no API key needed)
+#   g++             GNU C++ compiler with -std=c++17 support
+#                   Linux : sudo apt install g++
+#                   macOS : xcode-select --install
+#   python3 >= 3.11 Required for sys.set_int_max_str_digits()
+#
+# OPTIONAL — analysis / visualisation (not in repo yet, needed for plots)
+# -------------------------------------------------------------------------
+# matplotlib>=3.5.0
+# numpy>=1.21.0

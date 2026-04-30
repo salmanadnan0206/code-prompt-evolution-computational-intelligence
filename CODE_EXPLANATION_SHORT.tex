@@ -1,6 +1,6 @@
 % ==========================================================================
 %  CODE_EXPLANATION_SHORT.tex  --  Condensed Walkthrough of the GA Prompt Optimiser
-%  Target: ~40 pages.  Focus: call chains, function roles, cross-file data flow.
+%  Target: ~32 pages.  Focus: call chains, function roles, cross-file data flow.
 % ==========================================================================
 \documentclass[11pt,a4paper]{report}
 
@@ -44,6 +44,7 @@
   numbers=left, numberstyle=\tiny\color{gray}, numbersep=6pt,
   tabsize=4, xleftmargin=1.2em, framexleftmargin=1.2em,
   aboveskip=0.5em, belowskip=0.5em,
+  literate={---}{{---}}1,
 }
 \lstdefinestyle{chain}{
   language={}, basicstyle=\ttfamily\footnotesize,
@@ -89,11 +90,12 @@
 \centering\vspace*{2.5cm}
 {\Huge\bfseries Code Explanation\par}\vspace{0.6cm}
 {\LARGE GA Prompt Optimiser for LLM Code Generation\par}\vspace{1cm}
-{\Large Evolving System Prompts on the APPS Dataset\par}\vspace{2cm}
+{\Large Evolving System Prompts on Codeforces Problems\par}\vspace{2cm}
 {\large Group 1 --- Computational Intelligence, Spring 2026\par}\vspace{0.8cm}
 {\large April 2026\par}\vfill
 {\small Condensed walkthrough: every file, every function, every call chain.\\
-Includes cross-file data-flow diagrams and a complete worked example.}
+Backend: Google Cloud Vertex AI (Gemini 2.5 Flash \& Pro).\\
+Includes cross-file data-flow diagrams and complete worked examples.}
 \end{titlepage}
 
 \tableofcontents\newpage
@@ -105,33 +107,35 @@ Includes cross-file data-flow diagrams and a complete worked example.}
 \section{What the Project Does}
 
 A \textbf{Genetic Algorithm (GA)} automatically discovers the best \textbf{system
-prompt} --- a paragraph of English instructions --- for a Claude model that generates
-Python code.  Each prompt is a \emph{chromosome}; fitness is the average fraction of
-test cases the LLM-generated code passes on 100 APPS coding problems.  Over 20
-generations of selection, crossover, and mutation the GA evolves a prompt that solves
-more problems correctly.
+prompt} --- a paragraph of English instructions --- for a Gemini model that generates
+\textbf{C++ code}.  Each prompt is a \emph{chromosome}; fitness is the average fraction
+of test cases the LLM-generated C++ program passes on 65 Codeforces coding problems.
+Over 12 generations of selection, crossover, and mutation the GA evolves a prompt that
+solves more problems correctly.
 
 \begin{concept}{Key idea}
 Manual prompt engineering is trial-and-error.  This project automates it: the GA
 \emph{searches} all possible English instruction paragraphs, using test-case pass
-rates as the fitness signal.
+rates as the fitness signal.  The LLM never sees the test cases --- only the problem
+statement.
 \end{concept}
 
-\section{The Eight Files}
+\section{The Nine Files}
 
 \begin{center}
-\begin{tabular}{@{}lrp{7.5cm}@{}}
+\begin{tabular}{@{}lrp{7cm}@{}}
 \toprule
 \textbf{File} & \textbf{Lines} & \textbf{Role} \\
 \midrule
-\pyf{config.py}        & 62  & Single source of truth for all hyperparameters and paths \\
-\pyf{seeds.py}         & 116 & 15 hand-crafted generation-0 chromosomes \\
-\pyf{dataset.py}       & 88  & Load APPS problems from disk; split into evolution / holdout \\
-\pyf{evaluator.py}     & 122 & Extract code from LLM text; run tests in isolated subprocess \\
-\pyf{cost\_tracker.py} & 178 & Log token counts; compute dollar cost; write JSON report \\
-\pyf{llm.py}           & 202 & All Claude API calls (code gen, crossover, mutation) \\
-\pyf{ga.py}            & 228 & The evolutionary loop: select, breed, evaluate, replace \\
-\pyf{main.py}          & 168 & Orchestrate the run; checkpoint; save results \\
+\pyf{config.py}        & 83  & Single source of truth for all hyperparameters and paths \\
+\pyf{seeds.py}         & 137 & 15 hand-crafted generation-0 chromosomes (C++ focused) \\
+\pyf{dataset.py}       & 253 & Load 305 Codeforces problems; stratified split into evolution / holdout \\
+\pyf{evaluator.py}     & 295 & Extract C++ code; compile with g++ -std=c++23; run tests \\
+\pyf{cost\_tracker.py} & 244 & Stream token counts to JSONL; compute Vertex AI cost; write JSON reports \\
+\pyf{llm.py}           & 470 & All Vertex AI Gemini calls (code gen, crossover, mutation) \\
+\pyf{ga.py}            & 717 & The evolutionary loop: select, breed, evaluate (parallel), replace; 3 selection schemes \\
+\pyf{main.py}          & 545 & Orchestrate the run; checkpoint; resume; holdout; genealogy \\
+\pyf{genealogy.py}     & 154 & Trace ancestry of best evolved prompt through checkpoint files \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -142,22 +146,27 @@ rates as the fitness signal.
 main.py ----imports----> config, dataset, evaluator, ga, llm
                          cost_tracker (singleton: tracker)
                          seeds        (SEED_PROMPTS list)
+                         genealogy    (generate_report)
 
 ga.py   ----imports----> config, evaluator, llm
 
 llm.py  ----imports----> config
                          cost_tracker (singleton: tracker)
-                         anthropic    (Anthropic API SDK)
+                         google.genai (Vertex AI SDK)
 
-evaluator.py   -------> stdlib only  (re, subprocess, sys)
+evaluator.py   -------> stdlib only  (os, re, signal, subprocess, tempfile, time)
 dataset.py     -------> stdlib only  (json, random, sys, pathlib)
-cost_tracker.py ------> stdlib only  (json, time, dataclasses, datetime, pathlib)
+cost_tracker.py ------> stdlib only  (json, threading, time, dataclasses, datetime, pathlib)
+genealogy.py   -------> stdlib only  (json, pathlib, collections)
 seeds.py       -------> no imports
 \end{lstlisting}
 
 \begin{concept}{Network boundary}
-\pyf{llm.py} is the \textbf{only} file that touches the network.  All other files are
-pure computation or local disk I/O, so they can be tested without an API key.
+\pyf{llm.py} is the \textbf{only} file that touches the network.  It uses the
+\fn{google-genai} Python SDK with Google Cloud Vertex AI backend, authenticated via a
+service account JSON file (\fn{service-account.json}).  No interactive login or API key
+is required --- the service account credential is loaded once at startup.
+All other files are pure computation or local disk I/O.
 \end{concept}
 
 \section{Two-Model Architecture}
@@ -167,55 +176,91 @@ pure computation or local disk I/O, so they can be tested without an API key.
 \toprule
 \textbf{Role} & \textbf{Model} & \textbf{Temp.} & \textbf{Purpose} \\
 \midrule
-Target (subject) & \fn{claude-haiku-4-5-20251001} & 0.0 & Generate code; fitness eval \\
-Optimizer (tool) & \fn{claude-sonnet-4-6}          & 0.7 & Crossover and mutation \\
+Target (subject)    & \fn{gemini-2.5-flash} & 0.0 (enforced) & Generate C++ code; fitness eval \\
+Optimizer (tool)    & \fn{gemini-2.5-pro}   & 0.7 (enforced) & Crossover and mutation operators \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Temperature 0.0 on the target model ensures the same prompt always produces the same
-code on the same problem, making fitness scores comparable across generations.
-Temperature 0.7 on the optimizer introduces creativity for blending and mutating prompts.
+\begin{concept}{Temperature enforcement}
+Unlike the previous Claude CLI design (where temperature flags were unavailable),
+the Vertex AI SDK enforces both temperatures exactly via
+\fn{GenerateContentConfig(temperature=...)}.  \fn{TARGET\_TEMPERATURE=0.0} makes
+code generation deterministic; \fn{OPTIMIZER\_TEMPERATURE=0.7} injects creative
+variation into the genetic operators.
+\end{concept}
+
+\begin{concept}{Thinking tokens}
+Gemini 2.5 models generate internal chain-of-thought (\emph{thinking tokens}) before
+producing the visible response.  These are billed at the same output rate and are
+tracked separately via \fn{usage\_metadata.thoughts\_token\_count}.  Budgets:
+\fn{thinking\_budget=512} for fitness calls (Flash), \fn{thinking\_budget=2048} for
+crossover/mutation (Pro).
+\end{concept}
 
 \section{Master Call-Flow (one generation)}
 
 \begin{lstlisting}[style=chain]
 main.main()
-  |-- dataset.load_problems(APPS_TRAIN)       -> list[dict]  (~2346 problems)
-  |-- dataset.split(problems, 100, 200, 42)   -> (evolution[100], holdout[200], rest)
+  |-- Vertex AI preflight: verify service-account.json exists + client connects
+  |-- dataset.load_problems()     -> list[dict]  (305 Codeforces problems)
+  |-- dataset.split(problems, 65, 200, 42)       -> (evolution[65], holdout[200])
+  |-- tracker.set_log_path(run_dir/"calls.jsonl")
+  |-- tracker.set_live_path(run_dir/"costs_live.json")
+  |-- tracker.set_costs_live_path(COSTS_DIR/"cost_<run_dir_name>.json")
+  |-- llm.set_error_log_path(run_dir/"llm_errors.log")
   |
-  +-- ga.run(SEED_PROMPTS, evolution_pool, on_generation=save_checkpoint)
+  +-- ga.run(SEED_PROMPTS[:5], evolution_pool, run_dir, on_generation=save_checkpoint,
+             selection_scheme=args.scheme, elitism_count=1 if scheme=="elitism" else None)
         |
-        | [GEN 0] for each of 15 seeds:
-        |   compute_fitness(ind, problems)          [100 API calls per seed]
-        |     -> llm.generate_code(prompt, q, fn)   -> raw LLM text
-        |       -> llm._call("fitness", Haiku, T=0) -> resp.content[0].text
-        |           -> tracker.record(tokens)
-        |     -> evaluator.extract_code(response)   -> code string
-        |     -> evaluator.run_tests(code, ...)      -> float [0,1]
+        | [GEN 0] for each of 5 seeds (sequential):
+        |   save seed_NN_<uid>.json checkpoint first (crash recovery)
+        |   compute_fitness(gen=0, ind, problems)   [65 problems, PARALLEL_EVALS=5]
+        |     ThreadPoolExecutor(max_workers=5):
+        |       _eval_one_problem(gen, ind, prob, idx, total)
+        |         time.sleep(random.uniform(0,1))   [stagger concurrent requests]
+        |         -> llm.generate_code(ind.prompt, prob["question"])
+        |              client.models.generate_content(...)  [Gemini Flash]
+        |              -> tracker.record(phase, model, tokens, cost)
+        |         -> _eval_code_for_problem(gen, ind, prob, idx, total, response, llm_time)
+        |              evaluator.extract_code(response)  -> C++ code string
+        |              evaluator.run_tests_verbose(code, inputs, outputs, timeout=2)
+        |                _compile(code)          -> g++ -O2 -std=c++23 [Popen+setsid]
+        |                _run_one(bin, stdin, 2) -> actual stdout       [Popen+setsid]
+        |                _outputs_match(actual, expected)
+        |              _log_evaluation(entry)    -> evaluations_genNN.jsonl
+        |              returns (score, failure_example_or_None)
+        |       _assign_failure_examples(ind, collected_failures) -> ind.failure_examples
+        |     fitness = mean(scores)
         |
-        | [GENS 1..20] for each of 13 new offspring:
-        |   tournament_select(population)  x2        -> parent_a, parent_b
-        |   breed(parent_a, parent_b)
-        |     -> llm.crossover(a, b)   [80%]         -> merged prompt
-        |     -> llm.mutate_inject(p)  [25%]         -> prompt + new strategy
-        |     -> llm.mutate_delete(p)  [15%]         -> prompt - weak sentence
-        |     -> llm.mutate_rephrase(p)[10%]         -> prompt (rephrased)
-        |     -> Individual(prompt, uid, parents, ops)  [fitness = -1]
-        |   compute_fitness(child, problems)          [100 API calls per child]
-        |   save_checkpoint(run_dir, gen, population) -> generation_NN.json
+        | [GENS 1..12] for each generation:
+        |   _select(population, rng)  x2 -> parents  [tournament/roulette per --scheme]
+        |   breed(p1, p2, rng, allow_mutation=True or False)  -> offspring
+        |     llm.crossover(a, b)                    [80% chance]
+        |     llm.mutate_inject(p, failure_examples) [25%] (if allow_mutation)
+        |     llm.mutate_delete(p)                   [15%] (if allow_mutation)
+        |     llm.mutate_rephrase(p)                 [10%] (if allow_mutation)
+        |   Note: first CROSSOVER_ONLY_SLOTS=2 offspring skip mutations
+        |   compute_fitness(gen, offspring, problems) [parallel, 65 problems each]
+        |   save_checkpoint(run_dir, gen, pop, stats) -> generation_NN.json
         |
-        +-- returns (best_Individual, history[21 dicts])
+        | Convergence check each gen:
+        |   CV = std/mean; if CV < 0.01 for 3 consecutive gens -> early stop
+        |
+        +-- returns (best_Individual, history[list of dicts])
   |
-  |-- evaluate_on_holdout(best.prompt, holdout[200])  [200 API calls]
+  |-- evaluate_on_holdout(best.prompt, holdout[200])  [ThreadPoolExecutor, parallel]
+  |-- genealogy.generate_report(run_dir, best.uid)    -> genealogy_report.txt
   +-- tracker.flush(extra)   -> Code/Costs/cost_TIMESTAMP.json
 \end{lstlisting}
 
 \begin{concept}{API call scale}
-One full run makes approximately:\\
-$15 \times 100 = 1{,}500$ fitness calls (gen 0) +
-$20 \times 13 \times 100 = 26{,}000$ (gens 1--20) +
-$200$ (holdout) = \textbf{~27,700 Haiku calls} + ~800 Sonnet calls for operators.
+One full run (no early stop) makes approximately:\\
+$5 \times 65 = 325$ Flash calls (gen 0) +
+$12 \times 5 \times 65 = 3{,}900$ Flash calls (gens 1--12) +
+$200$ Flash calls (holdout) = \textbf{4,425 Gemini Flash calls}.\\
+Crossover/mutation: $\approx 12 \times (5 \times 0.8) + (3 \times 0.25) + (3 \times 0.15) + (3 \times 0.10) = 66$ Pro calls.\\
+Estimated cost: $\approx\$2.12$ (Flash) $+$ $\approx\$0.89$ (Pro) $\approx \$3.01$ total.
 \end{concept}
 
 
@@ -227,52 +272,82 @@ $200$ (holdout) = \textbf{~27,700 Haiku calls} + ~800 Sonnet calls for operators
 
 Every number and path lives here.  No other file contains hard-coded values.
 All constants are read at import time; changing \pyf{config.py} affects the whole system.
+Authentication uses a GCP service account JSON file --- no API key or \texttt{.env}
+file is required.
 
-\section{Key Constants Explained}
+\section{Key Constants (current values)}
 
-\begin{lstlisting}[style=py, caption={config.py (abridged)}]
+\begin{lstlisting}[style=py, caption={config.py (complete)}]
 from pathlib import Path
-from dotenv import load_dotenv
-load_dotenv()  # reads .env for ANTHROPIC_API_KEY
 
-ROOT         = Path(__file__).parent.parent     # Project/
-APPS_TRAIN   = ROOT / "Dataset Examples/APPS/train"
-RESULTS_DIR  = Path(__file__).parent / "results"   # Code/results/
+ROOT         = Path(__file__).parent
+APPS_TRAIN   = ROOT / "Dataset" / "APPS" / "train"
+APPS_TEST    = ROOT / "Dataset" / "APPS" / "test"
+RESULTS_DIR  = Path(__file__).parent / "results"
 
-EVOLUTION_SIZE = 100   # problems used as fitness benchmark
-HOLDOUT_SIZE   = 200   # problems reserved for final test
-RANDOM_SEED    = 42
+# Dataset -- 305 pre-selected Codeforces problems
+EVOLUTION_SIZE      = 65    # stratified evolution pool (5 harder + 60 regular)
+HOLDOUT_SIZE        = 200   # held-out for final generalisation test
+RANDOM_SEED         = 42
+EARLY_STOP_FAILURES = 3     # stop running tests after N consecutive failures
 
-POPULATION_SIZE   = 15
-GENERATIONS       = 20
-ELITISM_COUNT     = 2   # top-2 survive unchanged every generation
-TOURNAMENT_SIZE   = 3   # pick best of 3 random draws for each parent
+# Genetic Algorithm
+POPULATION_SIZE      = 5
+GENERATIONS          = 12
+ELITISM_COUNT        = 0    # no frozen elites -- all slots bred via crossover+mutation
+CROSSOVER_ONLY_SLOTS = 2    # first N offspring per gen get crossover only (no mutation)
+TOURNAMENT_SIZE      = 3    # best-of-3 random draws for each parent
 
-CROSSOVER_RATE    = 0.8    # probability crossover fires per offspring
-MUT_INJECT_PROB   = 0.25   # probability inject mutation fires (independent)
+CROSSOVER_RATE    = 0.8
+MUT_INJECT_PROB   = 0.25
 MUT_DELETE_PROB   = 0.15
 MUT_REPHRASE_PROB = 0.10
 
-TARGET_MODEL       = "claude-haiku-4-5-20251001"
-TARGET_TEMPERATURE = 0.0      # deterministic; repeatable fitness
-OPTIMIZER_MODEL       = "claude-sonnet-4-6"
-OPTIMIZER_TEMPERATURE = 0.7   # creative; varied crossover/mutation
-MAX_CODE_TOKENS     = 1024
-MAX_OPERATOR_TOKENS = 600
-EXEC_TIMEOUT = 5   # seconds before subprocess is killed
+# Google Cloud Vertex AI -- Gemini backend
+SERVICE_ACCOUNT_PATH = Path(__file__).parent / "service-account.json"
+GCP_REGION           = "us-central1"
+
+TARGET_MODEL    = "gemini-2.5-flash"    # code generation (fitness eval)
+OPTIMIZER_MODEL = "gemini-2.5-pro"      # crossover / mutation meta-prompts
+
+TARGET_TEMPERATURE    = 0.0   # enforced via GenerateContentConfig
+OPTIMIZER_TEMPERATURE = 0.7   # enforced via GenerateContentConfig
+
+API_FALLBACK_MAX_TOKENS_CODE = 8192   # max output tokens for code generation
+API_FALLBACK_MAX_TOKENS_OPS  = 700    # crossover / mutation outputs are short
+
+# Convergence detection (CV = std/mean per generation)
+CONVERGENCE_CV_THRESHOLD = 0.01   # 1% variation -> converged
+CONVERGENCE_PATIENCE     = 3      # consecutive stagnant generations to confirm
+CONVERGENCE_MIN_MEAN     = 0.01   # only check CV when mean fitness > this
+
+# Code execution (g++ compilation + binary runs)
+EXEC_TIMEOUT    = 2    # seconds per test-case binary run
+COMPILE_TIMEOUT = 15   # seconds allowed for g++ compilation
+PARALLEL_EVALS  = 5    # problems evaluated simultaneously per individual
 \end{lstlisting}
 
-\begin{concept}{Elitism prevents regression}
-\fn{ELITISM\_COUNT=2} guarantees the top 2 prompts always pass unchanged into the next
-generation.  Without elitism, an excellent prompt found in generation 5 could be lost
-if all its offspring happen to score worse.
+\begin{concept}{Path change: ROOT is now \fn{Path(\_\_file\_\_).parent}}
+\fn{ROOT} previously resolved to the project parent directory (\fn{parent.parent}).
+It now resolves to the \fn{Code/} directory itself (\fn{parent}).
+Consequently the dataset path changed from \fn{ROOT / "Dataset Examples" / ...}
+to \fn{ROOT / "Dataset" / ...} to match the actual folder layout.
+This means all dataset files live under \fn{Code/Dataset/APPS/\{train,test\}/}.
+\end{concept}
+
+\begin{concept}{CROSSOVER\_ONLY\_SLOTS and elitism change}
+\fn{ELITISM\_COUNT} was lowered from 2 to 0 --- no individuals are frozen across
+generations.  Instead, \fn{CROSSOVER\_ONLY\_SLOTS=2} ensures the first 2 offspring per
+generation undergo only crossover (no mutation), providing stability without hard-locking
+elite individuals.  The remaining 3 offspring per generation are eligible for all mutation
+operators.
 \end{concept}
 
 \begin{concept}{Mutations are independent}
 Each of the three mutation probabilities is checked with a separate \fn{rng.random()}
 call, so all three can fire on the same offspring (probability $0.25 \times 0.15 \times
 0.10 = 0.00375$), or none can fire ($0.75 \times 0.85 \times 0.90 = 0.574$).
-This gives $2^3 = 8$ possible mutation combinations per offspring.
+Only offspring beyond \fn{CROSSOVER\_ONLY\_SLOTS} are eligible for mutation.
 \end{concept}
 
 
@@ -280,41 +355,46 @@ This gives $2^3 = 8$ possible mutation combinations per offspring.
 \chapter{\pyf{seeds.py} --- Initial Population}
 % ==========================================================================
 
-\pyf{seeds.py} defines \fn{SEED\_PROMPTS}: a Python \texttt{list[str]} of 15 diverse
-instruction paragraphs.  Each is 2--4 sentences emphasising a different coding strategy:
+\pyf{seeds.py} defines \fn{SEED\_PROMPTS}: a \texttt{list[str]} of 15 diverse
+instruction paragraphs.  All prompts require a \textbf{complete, compilable C++ program}
+as output; each emphasises a different cognitive strategy:
 
 \begin{center}
 \begin{tabular}{@{}rll@{}}
 \toprule
 \# & Strategy & Core emphasis \\
 \midrule
-1  & Structured analysis     & Identify types and edge cases before coding \\
-2  & Competitive programmer  & Find the algorithm pattern first \\
-3  & Return-type focus       & Match exact return type and format \\
-4  & Step-by-step reasoning  & Four-step process: understand, identify, handle, code \\
-5  & Example-driven          & Trace examples manually before implementing \\
-6  & Minimal / precise       & Simplest correct solution; no extra code \\
-7  & Edge-case defender      & Enumerate: empty, single, zero, negative, max \\
-8  & Algorithm-first         & Choose data structure before writing a line \\
-9  & Output-format guard     & Verify return type (int/list/str/bool/tuple) \\
-10 & Pseudocode-then-code    & English sketch first, then translate \\
-11 & Constraint-aware        & Match time complexity to stated constraints \\
-12 & Defensive / robust      & Assume worst-case valid input \\
-13 & Readability-first       & Meaningful names; correct beats clever \\
-14 & Verify-against-examples & Mental verification before finalising \\
-15 & Direct and focused      & Transformation-first; no extra output \\
+1  & Structured analysis     & Analyse input/output format, constraints, edge cases before coding \\
+2  & Terse and direct        & Full C++ solution; compile with \fn{g++ -std=c++23}; just working code \\
+3  & Competitive programmer  & Identify algorithm pattern (greedy, DP, graph, binary search, math) \\
+4  & Step-by-step reasoning  & 4-step: understand, identify algorithm, handle boundary, implement \\
+5  & Example-driven          & Trace sample inputs manually; confirm behaviour before implementing \\
+6  & Conversational          & Give me the full C++ source with main; handle all edge cases \\
+7  & Edge-case defender      & n=0, n=1, all equal, maximum values, integer overflow \\
+8  & Algorithm-first         & Determine algorithm + time/space complexity before writing code \\
+9  & Specification-heavy     & 5-point spec: cin/cout, \fn{g++ -O2 -std=c++23}, all cases, exact format \\
+10 & Pseudocode-then-code    & English sketch first, then translate to C++; cin/cout; include main() \\
+11 & Constraint-aware        & If n=$10^5$, $O(n^2)$ will TLE; match complexity to constraints \\
+12 & Defensive / robust      & Assume adversarial inputs at extreme constraint boundaries \\
+13 & Readability-first       & Meaningful variable names; correct beats clever; standard I/O \\
+14 & Verify-against-examples & Mentally verify against sample inputs before writing code \\
+15 & Direct and focused      & Entire C++ program; reads stdin; writes stdout; passes all tests \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The file ends with \fn{assert len(SEED\_PROMPTS) == 15} --- if a seed is accidentally
-added or removed the program crashes immediately on import, before any API calls are made.
+The file ends with \fn{assert len(SEED\_PROMPTS) >= 5} (previously \fn{== 15}).
+The guard now allows populations smaller than 15 --- \fn{main.py} uses only
+\fn{SEED\_PROMPTS[:POPULATION\_SIZE]} (the first 5 with \fn{POPULATION\_SIZE=5}).
+Seeds 2 and 9 reference \fn{g++ -std=c++23} (updated from \fn{c++17}).
 
-In \fn{ga.run()}, these 15 strings become \fn{Individual} objects:
+In \fn{ga.run()}, the selected seeds become \fn{Individual} objects:
 \begin{lstlisting}[style=py]
-population = [Individual(prompt=p) for p in seed_prompts]
+population = [Individual(prompt=p, operators="seed")
+              for p in seed_prompts[:config.POPULATION_SIZE]]
 # Each Individual: prompt=<seed>, fitness=-1.0, uid=<random 8-char hex>,
-#                  parent_a="", parent_b="", operators=""
+#                  parent_a="", parent_b="", operators="seed",
+#                  intermediate_steps={}, failure_examples=[]
 \end{lstlisting}
 
 
@@ -322,402 +402,602 @@ population = [Individual(prompt=p) for p in seed_prompts]
 \chapter{\pyf{dataset.py} --- Loading \& Splitting Problems}
 % ==========================================================================
 
-\section{\fn{load\_problems(apps\_train\_dir)} $\to$ \fn{list[dict]}}
+\section{Overview}
 
-\begin{spec}{load\_problems(apps\_train\_dir) -> list[dict]}
-Called by: main.main() [main.py:75] \\
-Calls: Path.iterdir(), json.loads(), Path.read\_text()
+\pyf{dataset.py} loads 305 pre-selected Codeforces problems (stdin/stdout, C++ programs)
+and performs a \textbf{stratified split} into an evolution pool (65) and a held-out test
+set (200).  Problem IDs are hard-coded in module-level dictionaries, ensuring
+reproducibility without requiring a specific dataset directory structure.
+
+\begin{concept}{Why stratified?}
+A plain shuffle risks all harder problems landing in holdout.  Stratified sampling
+draws a fixed count from each difficulty tier, guaranteeing the evolution pool sees
+problems at every rating level --- including the harder 1800/1900-rated problems
+added in this version.
+\end{concept}
+
+\section{\fn{load\_problems()} $\to$ \fn{list[dict]}}
+
+\begin{spec}{load\_problems() -> list[dict]}
+Called by: main.main() \\
+Calls: Path.exists(), json.loads(), Path.read\_text()
 \end{spec}
 
-Iterates every subdirectory of \pyf{APPS/train/}.  Each subdirectory is one problem.
-Three files are required: \fn{metadata.json}, \fn{input\_output.json}, \fn{question.txt}.
-A five-condition filter keeps only problems that are:
-(1)~\fn{difficulty == "introductory"},
-(2)~have a \fn{fn\_name} field,
-(3)~sourced from \fn{codewars.com},
-(4)~have non-empty \fn{inputs}, and
-(5)~have non-empty \fn{outputs}.
+Iterates over the hard-coded \fn{\_SELECTED} dict (split $\to$ rating $\to$ folder IDs).
+For each problem folder it reads \fn{question.txt} and \fn{input\_output.json}.
+Skips problems with missing files, bad JSON, or empty test cases.
 
-\textbf{Why Codewars only?}  Codewars problems use standalone functions
-(\fn{def grader(score): return ...}), giving a consistent I/O format.  LeetCode uses
-\fn{class Solution} methods which complicates code extraction.  Inputs are parsed Python
-argument lists; outputs are \fn{[return\_value]} (single-element list).
+Rating distribution (305 problems total):
+
+\begin{center}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Tier} & \textbf{Rating} & \textbf{Train} & \textbf{Test} & \textbf{Total} \\
+\midrule
+Regular & 800  & 29 & 21 & 50 \\
+Regular & 1000 & 10 & 40 & 50 \\
+Regular & 1100 & 14 & 19 & 33 \\
+Regular & 1200 & 23 & 10 & 33 \\
+Regular & 1300 & 23 & 11 & 34 \\
+Regular & 1400 & 27 &  5 & 32 \\
+Regular & 1500 & 33 &  0 & 33 \\
+Regular & 1600 & 17 &  0 & 17 \\
+Regular & 1700 & 18 &  0 & 18 \\
+Harder  & 1800 &  3 &  0 &  3 \\
+Harder  & 1900 &  2 &  0 &  2 \\
+\midrule
+\textbf{Total} & & 199 & 106 & 305 \\
+\bottomrule
+\end{tabular}
+\end{center}
 
 Each passing problem produces:
 \begin{lstlisting}[style=py]
 {
-    "id":       "3715",
-    "question": "Complete the function that takes an array of words...",
-    "fn_name":  "nth_char",
-    "inputs":   [ [["yoda","best","has"]], [["a","bc","def"]] ],
-    "outputs":  [ ["oes"], ["abd"] ]
-    # inputs[i] = list of args  => fn_name(*inputs[i])
-    # outputs[i] = [return_value]  => [result] == outputs[i]
+    "id":       "train/0002",   # "<split>/<folder>"
+    "question": "Given n integers, ...",
+    "inputs":   ["3\n1 2 3\n", "1\n0\n"],   # raw stdin strings
+    "outputs":  ["6\n",        "0\n"],        # expected stdout strings
+    "rating":   800,
 }
 \end{lstlisting}
 
-\section{\fn{split(problems, evolution\_size, holdout\_size, seed=42)} $\to$ \fn{(list, list, list)}}
+\section{\fn{split()} $\to$ \fn{(evolution, holdout, reserved)}}
 
-\begin{spec}{split(...) -> (evolution[100], holdout[200], rest)}
-Called by: main.main() [main.py:82] \\
-Calls: random.Random(seed), list.copy(), rng.shuffle()
+\begin{spec}{split(problems, evolution\_size=65, holdout\_size=200, seed=42) -> (list, list, list)}
+Called by: main.main() \\
+Calls: random.Random(seed), list comprehension, rng.shuffle(), rng.sample()
 \end{spec}
 
-\begin{lstlisting}[style=py]
-rng = random.Random(seed)   # isolated RNG, does not affect global random state
-shuffled = problems.copy()  # never modify the caller's list
-rng.shuffle(shuffled)       # deterministic: seed 42 always gives the same order
+The stratified split algorithm:
 
-evolution = shuffled[:100]         # the GA's training set
-holdout   = shuffled[100:300]      # reserved for final generalisation test
-rest      = shuffled[300:]         # unused buffer
+\begin{lstlisting}[style=chain]
+split(problems, evolution_size=65, holdout_size=200, seed=42):
+
+  rng = random.Random(seed)   # isolated, reproducible
+  problems_by_rating = group problems by their "rating" field
+
+  [HARDER PROBLEMS -- always go to evolution]
+  harder_tiers = {1800, 1900}
+  harder_problems = [p for p in problems if p["rating"] in harder_tiers]
+  evolution = list(harder_problems)      # 5 problems (3+2)
+
+  [REGULAR TIERS -- stratified draw]
+  _EVOLUTION_PER_TIER = {800:7, 1000:6, 1100:6, 1200:7, 1300:7,
+                          1400:7, 1500:7, 1600:6, 1700:7}   # sums to 60
+  for each regular rating tier:
+      tier_problems = [p for p in problems if p["rating"] == rating]
+      rng.shuffle(tier_problems)    # seeded shuffle
+      evolution += tier_problems[:count]   # take exactly count from this tier
+
+  # Result: evolution has exactly 65 problems (5 harder + 60 regular)
+
+  [HOLDOUT -- remaining problems, shuffled]
+  remaining = [p for p in problems if p not in evolution set]
+  rng.shuffle(remaining)
+  holdout  = remaining[:holdout_size]      # 200 problems
+  reserved = remaining[holdout_size:]      # leftovers (small number)
+  return (evolution, holdout, reserved)
 \end{lstlisting}
 
-The fixed seed is critical: if the 100 evolution problems changed between generations,
-fitness scores from generation 3 and generation 7 would not be comparable.
+\section{\fn{reserved\_train\_problems(problems, seed=42)} $\to$ \fn{list[dict]}}
 
-\begin{concept}{Train / test split}
-The GA "trains" on 100 problems (evolution pool).  The best evolved prompt is
-then evaluated on 200 never-seen holdout problems.  If holdout fitness is much lower
-than evolution fitness, the prompt has overfitted to the 100 training problems.
+\begin{spec}{reserved\_train\_problems(problems, seed=42) -> list[dict]}
+Called by: main.main() (optional, for analysis) \\
+Returns: the 35 train-split problems not selected for evolution
+\end{spec}
+
+This function returns the train-split problems that were shuffled out of the
+65-problem evolution pool --- useful for post-hoc analysis without touching the
+holdout set.
+
+\begin{concept}{Fixed seed is critical}
+The same seed 42 must be used for all \fn{split()} calls throughout a run.  If the
+65 evolution problems changed between generations, fitness scores from generation 3
+and generation 7 would not be comparable.  The seed is stored in \fn{config.json}
+in each run directory.
 \end{concept}
 
 
 % ==========================================================================
-\chapter{\pyf{evaluator.py} --- Code Extraction \& Sandboxed Testing}
+\chapter{\pyf{evaluator.py} --- C++ Extraction, Compilation \& Testing}
 % ==========================================================================
 
 \section{Overview}
 
-Two responsibilities: (1) strip Python code out of an LLM's raw text response, and
-(2) run that code in an isolated subprocess and return a partial-credit score.
+Two responsibilities: (1) strip C++ code out of an LLM's raw text response, and
+(2) compile it with \fn{g++} and run the resulting binary against test cases, returning
+a partial-credit score.  Uses only the Python standard library, plus \fn{signal} for
+process-group killing.
 
 \section{\fn{extract\_code(response: str)} $\to$ \fn{str}}
 
 \begin{spec}{extract\_code(response) -> str}
-Called by: ga.compute\_fitness() [ga.py:68]; main.evaluate\_on\_holdout() [main.py:54] \\
-Calls: re.search() (at most twice)
+Called by: ga.\_eval\_code\_for\_problem(); main.evaluate\_on\_holdout()
 \end{spec}
 
-Tries three strategies in order, returning on first success:
+Tries three strategies in order:
 
 \begin{lstlisting}[style=py]
-# 1. Tagged python fence
-m = re.search(r"```python\s*\n([\s\S]*?)```", response)
+# 1. Tagged C++ fence:  ```cpp ... ``` or ```c++ ... ```
+m = re.search(r"```(?:cpp|c\+\+)\s*\n([\s\S]*?)```", response, re.IGNORECASE)
 if m: return m.group(1).strip()
 
-# 2. Any fence
+# 2. Any fence:  ``` ... ```
 m = re.search(r"```\s*\n?([\s\S]*?)```", response)
 if m: return m.group(1).strip()
 
-# 3. Assume raw code
+# 3. Assume raw code (no fences)
 return response.strip()
 \end{lstlisting}
 
-Example: input \fn{"Here's my answer:\textbackslash n```python\textbackslash ndef nth\_char(words):\textbackslash n    ...\textbackslash n```"} $\to$ output \fn{"def nth\_char(words):\textbackslash n    ..."}.
+\section{Process-Group Management: \fn{\_kill\_group()}}
 
-\section{\fn{has\_function(code: str, fn\_name: str)} $\to$ \fn{bool}}
-
-\begin{spec}{has\_function(code, fn\_name) -> bool}
-Called by: run\_tests() [evaluator.py:97] \\
-Calls: re.search(), re.escape()
+\begin{spec}{\_kill\_group(proc) -> None}
+Called by: \_compile(), \_run\_one() on timeout
 \end{spec}
 
 \begin{lstlisting}[style=py]
-return bool(re.search(rf"\bdef\s+{re.escape(fn_name)}\s*\(", code))
-# \b = word boundary, \s+ = spaces, \s* = optional space before (
-# Guards against wrong function name (NameError), wrong class (method).
-# If False, run_tests() returns 0.0 immediately without launching subprocess.
+def _kill_group(proc):
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 \end{lstlisting}
 
-\section{\fn{run\_tests(code, fn\_name, inputs, outputs, timeout=5)} $\to$ \fn{float}}
+\fn{SIGKILL} is sent to the entire \textbf{process group}, not just the parent.
+This prevents orphaned child processes (e.g., a spawned shell or forked worker)
+from persisting after a timeout.  Both \fn{\_compile()} and \fn{\_run\_one()}
+create new process groups via \fn{preexec\_fn=os.setsid} in \fn{subprocess.Popen}.
 
-\begin{spec}{run\_tests(...) -> float in [0.0, 1.0]}
-Called by: ga.compute\_fitness() [ga.py:69]; main.evaluate\_on\_holdout() [main.py:56] \\
-Calls: has\_function(), \_build\_script(), subprocess.run()
+\section{\fn{\_compile(code: str)} $\to$ \fn{(bin\_path | None, error\_msg)}}
+
+\begin{spec}{\_compile(code) -> (str | None, str)}
+Called by: run\_tests\_verbose() \\
+Calls: tempfile.mkstemp(), subprocess.Popen, proc.communicate(timeout=COMPILE\_TIMEOUT)
 \end{spec}
-
-\textbf{How it works end-to-end:}
 
 \begin{lstlisting}[style=chain]
-run_tests(code, fn_name, inputs, outputs, timeout=5)
-  |
-  +-- if not code or not has_function(code, fn_name):
-  |       return 0.0    # early-out: no code or wrong function name
-  |
-  +-- script = _build_script(code, fn_name, inputs, outputs)
-  |       Produces a complete Python script (see below)
-  |
-  +-- proc = subprocess.run(
-  |       [sys.executable, "-c", script],
-  |       capture_output=True, text=True, timeout=timeout)
-  |       # Fully isolated process; if it crashes, GA is unaffected
-  |
-  +-- results = [int(line[len("__R__:"):])
-  |               for line in proc.stdout.splitlines()
-  |               if line.startswith("__R__:")]
-  |       # Only sentinel lines are parsed; stray print() calls are ignored
-  |
-  +-- if not results: return 0.0   # script crashed before any test ran
-  +-- return sum(results) / len(inputs)   # partial credit
-        # denominator = TOTAL tests, not just those that produced output
-        # e.g. 3 pass out of 4 = 0.75 even if script crashed mid-way
+_compile(code):
+  src_fd, src_path = tempfile.mkstemp(suffix=".cpp")   # temp .cpp file
+  bin_path = src_path[:-4]                              # strip extension
+
+  write code to src_path
+  proc = subprocess.Popen(
+      ["g++", "-O2", "-std=c++23", "-o", bin_path, src_path],
+      stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+      preexec_fn=os.setsid)                # new process group for kill_group()
+
+  try:
+      _, stderr = proc.communicate(timeout=COMPILE_TIMEOUT)
+  except subprocess.TimeoutExpired:
+      _kill_group(proc)
+      proc.communicate()
+      return None, "compile_timeout"
+
+  if proc.returncode != 0:
+      return None, stderr.decode()[:500]  # compile error
+  return bin_path, ""                     # success
+
+  finally: os.unlink(src_path)            # always delete .cpp
+           if failed: os.unlink(bin_path) # only delete binary on failure
 \end{lstlisting}
 
-\textbf{The test harness script} assembled by \fn{\_build\_script()} looks like this
-for an \fn{nth\_char} problem:
+\begin{warn}{g++ -std=c++23 (not c++17)}
+The compiler standard was updated from \fn{-std=c++17} to \fn{-std=c++23}.
+Seeds 2 and 9 in \fn{seeds.py} were correspondingly updated to reference \fn{c++23}.
+Modern Codeforces problems increasingly use C++23 features.
+\end{warn}
 
-\begin{lstlisting}[style=py, caption={Script produced by \_build\_script() -- executed in subprocess}]
-import sys
-sys.set_int_max_str_digits(1_000_000)
+\section{\fn{run\_tests\_verbose()} $\to$ \fn{dict}}
 
-def nth_char(words):               # <-- LLM-generated code pasted verbatim
-    return ''.join(word[i] if i < len(word) else '#'
-                   for i, word in enumerate(words, 1))
+\begin{spec}{run\_tests\_verbose(code, inputs, outputs, timeout=2) -> dict}
+Called by: ga.\_eval\_code\_for\_problem() \\
+Calls: \_compile(), \_run\_one(), \_outputs\_match()
+\end{spec}
 
-def __run__(inp, expected):
-    try:
-        result = nth_char(*inp)    # call the generated function
-        # outputs are stored as [return_value], so wrap result in list:
-        sys.stdout.write("__R__:" + ("1" if [result] == expected else "0") + "\n")
-        sys.stdout.flush()
-    except Exception:              # catches NameError, TypeError, etc.
-        sys.stdout.write("__R__:0\n")
-        sys.stdout.flush()
+\begin{lstlisting}[style=chain]
+run_tests_verbose(code, inputs, outputs, timeout):
 
-__run__([["yoda","best","has"]], ["oes"])   # one line per test case
-__run__([["a","bc","def"]], ["abd"])
+  if not code or not code.strip():
+      return {score:0.0, reason:"empty_code", ...}
+
+  [COMPILE]
+  bin_path, err = _compile(code)
+  if bin_path is None:
+      return {score:0.0, reason:"compile_fail", compile:{error:err}, ...}
+
+  [RUN TESTS]
+  passed = 0; consecutive_fails = 0
+
+  for i in range(len(inputs)):
+      actual = _run_one(bin_path, inputs[i], timeout)
+      is_pass = actual is not None and _outputs_match(actual, outputs[i])
+
+      record test_cases[i] = {index, passed, actual, expected, time_s, timeout}
+
+      if is_pass: passed += 1; consecutive_fails = 0
+      else:
+          consecutive_fails += 1
+          if consecutive_fails >= EARLY_STOP_FAILURES:
+              early_stopped = True; break
+
+  score = passed / len(inputs)    # denominator = TOTAL tests (fair penalty)
+  reason = "perfect" | "partial_pass" | "all_fail" | "all_fail_early_stop"
+
+  return {score, reason, compile, test_cases, tests_total, tests_run,
+          early_stopped, total_test_time_s}
 \end{lstlisting}
 
-\begin{concept}{Why \fn{[result] == expected}?}
-APPS Codewars outputs are stored as \fn{[return\_value]}.  Wrapping the actual
-result in \fn{[result]} makes the comparison format match:
-\fn{["oes"] == ["oes"]} is \fn{True}; \fn{"oes" == ["oes"]} would always be \fn{False}.
+\fn{run\_tests()} is a thin wrapper returning only the float score:
+\begin{lstlisting}[style=py]
+def run_tests(code, inputs, outputs, timeout=2) -> float:
+    return run_tests_verbose(code, inputs, outputs, timeout)["score"]
+\end{lstlisting}
+
+\begin{concept}{Early stopping}
+After \fn{EARLY\_STOP\_FAILURES=3} consecutive failures, the test loop exits.  The
+score denominator is still \fn{len(inputs)} (total), so skipped tests count as
+failures.  This saves wall-clock time on clearly broken solutions.
 \end{concept}
 
-\begin{warn}{Why a subprocess?}
-Generated code is untrusted.  Direct import could crash the GA process (via
-\fn{sys.exit()} or infinite loop with no timeout).  The subprocess is killed after
-5 seconds; the GA continues regardless.
-\end{warn}
-
-\begin{warn}{Division by \fn{len(inputs)}, not \fn{len(results)}}
-If generated code crashes after 2 of 4 tests, only 2 \fn{\_\_R\_\_:} lines appear.
-But the denominator is still 4 (total tests), not 2 (completed tests).  This fairly
-penalises code that fails partway through.
-\end{warn}
-
 
 % ==========================================================================
-\chapter{\pyf{cost\_tracker.py} --- API Cost Logging}
+\chapter{\pyf{cost\_tracker.py} --- Token \& Cost Logging}
 % ==========================================================================
 
-\section{Purpose \& Location}
+\section{Purpose \& Design}
 
-Every Claude API call has a dollar cost.  This module logs token counts, computes
-costs from official Anthropic pricing, and writes a JSON breakdown to
-\fn{Code/Costs/cost\_TIMESTAMP.json} after each run.
+Logs token counts and estimated costs for every Vertex AI call.  The tracker streams
+each call record to a JSONL file immediately (no in-memory list), keeping memory
+usage flat regardless of run length.  Three live JSON files are updated after every
+call; a final summary is written to \fn{Code/Costs/} at run end.
 
-\begin{lstlisting}[style=py]
-COSTS_DIR = Path(__file__).parent / "Costs"   # Code/Costs/
-\end{lstlisting}
+\begin{concept}{Vertex AI billing}
+The project uses Google Cloud Vertex AI.  Costs are real GCP charges --- no flat
+subscription.  The \fn{PRICING} table contains verified Gemini rates (April 2026).
+Gemini 2.5 Flash: \$0.15/\$0.60 per MTok (in/out).
+Gemini 2.5 Pro: \$1.25/\$10.00 per MTok (in/out).
+The \$300 GCP free credit applies.
+\end{concept}
 
-\section{\fn{CallRecord} --- One API Call's Data}
-
-\begin{spec}{@dataclass CallRecord}
-Created by: CostTracker.record() [cost\_tracker.py:73] \\
-Stores: phase (str), model (str), input\_tokens (int), output\_tokens (int) \\
-Computes on-the-fly: input\_cost, output\_cost, total\_cost (via PRICING dict)
-\end{spec}
+\section{\fn{CallRecord} --- One Call's Data}
 
 \begin{lstlisting}[style=py]
 PRICING = {   # (input_$/MTok, output_$/MTok)
-    "claude-haiku-4-5-20251001": (1.00,  5.00),
-    "claude-sonnet-4-6":         (3.00, 15.00),
-    ...
+    "gemini-2.5-flash":     (0.15,  0.60),
+    "gemini-2.5-pro":       (1.25, 10.00),
+    "gemini-2.0-flash":     (0.10,  0.40),
+    "gemini-2.0-flash-001": (0.10,  0.40),
+    "claude-haiku-4-5@20251001":  (1.00,  5.00),  # kept for reference
+    "claude-haiku-4-5-20251001":  (1.00,  5.00),
+    "claude-sonnet-4-6":          (3.00, 15.00),
 }
 
-@property
-def total_cost(self) -> float:
-    rate_in, rate_out = PRICING.get(self.model, (0, 0))
-    return (self.input_tokens * rate_in
-          + self.output_tokens * rate_out) / 1_000_000
-# Example: 287 input tokens + 52 output tokens on Haiku 4.5:
-#   = (287*1.00 + 52*5.00) / 1e6 = $0.000547 per call
+@dataclass
+class CallRecord:
+    phase: str; model: str
+    input_tokens: int; output_tokens: int
+    cost_usd: float | None = None   # when set, used directly
+
+    @property
+    def total_cost(self) -> float:
+        if self.cost_usd is not None:
+            return self.cost_usd
+        rate_in, rate_out = PRICING.get(self.model, (0, 0))
+        return (self.input_tokens * rate_in
+              + self.output_tokens * rate_out) / 1_000_000
 \end{lstlisting}
 
-\section{\fn{CostTracker} --- The Singleton Accumulator}
+\section{\fn{CostTracker} --- The Streaming Singleton}
 
 \begin{spec}{class CostTracker}
-Module-level singleton: tracker = CostTracker() [line 197] \\
+Module-level singleton: tracker = CostTracker() \\
 Imported by llm.py as: from cost\_tracker import tracker
 \end{spec}
 
 \begin{lstlisting}[style=chain]
-CostTracker.record(phase, model, input_tokens, output_tokens)
-  Called by: llm._call() after every successful API response
-  Action: appends CallRecord to self.calls (in-memory log)
+CostTracker.set_log_path(path)
+  Called by: main.main() before GA starts
+  Action: opens JSONL stream to calls.jsonl in the run directory
 
-CostTracker._by_phase() -> dict
-  Groups self.calls by phase ("fitness", "crossover", "mutate_inject", ...)
-  Returns totals per phase: calls, tokens, cost
+CostTracker.set_live_path(path)
+  Called by: main.main()
+  Action: path updated with current totals after every call (run_dir/costs_live.json)
 
-CostTracker._by_model() -> dict
-  Groups self.calls by model ID
-  Returns totals per model
+CostTracker.set_costs_live_path(path)
+  Called by: main.main()
+  Action: second live path in Costs/ folder (Costs/run_live.json) updated every call
+
+CostTracker.restore_from_jsonl(path) -> int
+  Called by: main.main() on resume (--resume flag)
+  Action: replays existing calls.jsonl to restore running totals; returns lines loaded
+
+CostTracker.record(phase, model, input_tokens, output_tokens, cost_usd, extra)
+  Called by: llm.py after every successful Vertex AI response
+  Thread-safe (internal lock)
+  Action:
+    - updates running totals (_total_calls, _total_cost_usd, etc.)
+    - writes one JSON line immediately to calls.jsonl (no in-memory list)
+    {"t":"HH:MM:SS", "phase":..., "model":..., "in":..., "out":...,
+     "cost":..., "total_calls":..., "running_cost":...}
+    - overwrites both live JSON files
 
 CostTracker.flush(extra=None) -> Path
-  Called by: main.main() [main.py:154]  -- once per run, at the very end
+  Called by: main.main() at the very end
   Action:
-    - COSTS_DIR.mkdir(parents=True, exist_ok=True)   # create if needed
-    - assembles JSON report: totals + _by_phase() + _by_model() + pricing_used
+    - assembles summary from running totals (_phase_totals, _model_totals)
     - writes Code/Costs/cost_TIMESTAMP.json
     - returns Path of the written file
 \end{lstlisting}
 
-\begin{concept}{Singleton pattern}
-Python caches imported modules.  \fn{from cost\_tracker import tracker} in both
-\pyf{llm.py} and \pyf{main.py} gets the \emph{exact same} \fn{CostTracker} instance.
-So every \fn{\_call()} adds to the same list, and \fn{flush()} sees the complete
-history for the whole run.
+\begin{concept}{Streaming vs.\ in-memory}
+Each record is written to disk immediately and discarded; running totals are maintained
+as simple scalars.  A 4,425-call run uses negligible memory for cost tracking.
+The \fn{extra} parameter to \fn{record()} lets crossover/mutation calls embed
+input/output prompt text in the JSONL for audit purposes.
 \end{concept}
 
 
 % ==========================================================================
-\chapter{\pyf{llm.py} --- All Claude API Calls}
+\chapter{\pyf{llm.py} --- All Vertex AI Calls}
 % ==========================================================================
 
 \section{Overview}
 
-The sole interface to the Anthropic API.  All five public functions route through the
-private \fn{\_call()} wrapper, which handles authentication, retries, and cost logging.
+The sole interface to Gemini.  All public functions route through the private
+\fn{\_call\_realtime\_api()} wrapper, which uses the \fn{google-genai} SDK to call
+Vertex AI, handles exponential-backoff retries, tracks thinking tokens, and logs costs.
 
 \begin{lstlisting}[style=chain]
 Public API:
-  generate_code(system_prompt, question, fn_name)  -> str  [raw LLM text]
-  crossover(prompt_a, prompt_b)                    -> str  [merged prompt]
-  mutate_inject(prompt)                            -> str  [prompt + strategy]
-  mutate_delete(prompt)                            -> str  [prompt - sentence]
-  mutate_rephrase(prompt)                          -> str  [prompt rephrased]
+  generate_code(system_prompt, question)              -> str  [C++ code text]
+  crossover(prompt_a, prompt_b)                       -> str  [merged prompt]
+  mutate_inject(prompt, failure_examples=None)        -> str  [prompt + new strategy]
+  mutate_delete(prompt)                               -> str  [prompt - weakest sentence]
+  mutate_rephrase(prompt)                             -> str  [rephrased prompt]
+  set_error_log_path(path)                            -> None [llm_errors.log]
 
-All call through:
-  _call(phase, model, temperature, max_tokens, system, user) -> str
-    which calls _get_client() once (lazy init) then client.messages.create(...)
+  [Internal]
+  _get_api_client()                    -> google.genai.Client  [lazy singleton]
+  _call_realtime_api(phase, model, system, user,
+                     max_tokens, retries=10) -> str
+  # temperature and thinking_budget derived from phase:
+  #   phase=="fitness" -> temperature=0.0, thinking_budget=512
+  #   all other phases -> temperature=0.7, thinking_budget=2048
+  _call(phase, model, system, user, api_max_tokens) -> str  [thin wrapper]
 \end{lstlisting}
 
-\section{\fn{\_call()} --- The Core Wrapper}
+\section{\fn{\_get\_api\_client()} --- Lazy Singleton}
 
-\begin{spec}{\_call(phase, model, temperature, max\_tokens, system, user, retries=3) -> str}
-Called by: all five public functions \\
-Calls: \_get\_client(), client.messages.create(), tracker.record(), time.sleep()
+\begin{spec}{\_get\_api\_client() -> google.genai.Client}
+Called by: \_call\_realtime\_api() on first use \\
+Thread-safe: double-checked locking with \_client\_lock
 \end{spec}
 
-\begin{lstlisting}[style=py, caption={\_call() -- retry and logging logic}]
-def _call(phase, model, temperature, max_tokens, system, user, retries=3):
-    client = _get_client()   # returns cached anthropic.Anthropic(api_key=...)
-    for attempt in range(retries):
-        try:
-            resp = client.messages.create(
-                model=model, max_tokens=max_tokens,
-                temperature=temperature, system=system,
-                messages=[{"role": "user", "content": user}],
-            )
-            tracker.record(phase=phase, model=model,  # log tokens + cost
-                input_tokens=resp.usage.input_tokens,
-                output_tokens=resp.usage.output_tokens)
-            return resp.content[0].text               # the assistant's response
+\begin{lstlisting}[style=py]
+_api_client = None
+_api_client_lock = threading.Lock()
 
-        except anthropic.RateLimitError:
-            wait = 2 ** attempt * 5   # 5s, 10s, 20s (exponential backoff)
-            time.sleep(wait)
-        except anthropic.APIError as e:
-            if attempt == retries - 1: return ""      # give up; return empty
-            time.sleep(2)
-    return ""   # all retries exhausted
+def _get_api_client():
+    global _api_client
+    if _api_client is not None:
+        return _api_client          # fast path: already initialised
+    with _api_client_lock:
+        if _api_client is not None:
+            return _api_client      # double-check after acquiring lock
+        sa_info    = json.loads(config.SERVICE_ACCOUNT_PATH.read_text())
+        project_id = sa_info["project_id"]
+        credentials = service_account.Credentials.from_service_account_info(
+            sa_info,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        _api_client = genai.Client(
+            vertexai=True,
+            project=project_id,
+            location=config.GCP_REGION,
+            credentials=credentials,
+            http_options=HttpOptions(timeout=120_000),  # 120 s per request
+        )
+    return _api_client
 \end{lstlisting}
 
-\begin{concept}{What happens when \fn{\_call} returns \fn{""}}
-An empty response propagates as: \fn{extract\_code("")} $\to$ \fn{""}, then
-\fn{run\_tests("", ...)} $\to$ 0.0 immediately (empty-code guard).
+The singleton is initialised once and shared across all threads.  No re-authentication
+happens during a run.
+
+\section{\fn{\_call\_realtime\_api()} --- The Core Wrapper}
+
+\begin{spec}{\_call\_realtime\_api(phase, model, system, user, max\_tokens, retries=10) -> Optional[str]}
+Calls: \_get\_api\_client(), client.models.generate\_content(), tracker.record(), time.sleep()\\
+Retries: 10 attempts, exponential backoff 5s $\times$ 2\textasciicircum{attempt} + jitter\\
+Returns: response text; \fn{""} if all retries return empty; \fn{None} if all retries fail
+\end{spec}
+
+Temperature and thinking budget are derived internally from the \fn{phase} parameter:
+\fn{phase=="fitness"} $\Rightarrow$ temperature=0.0, thinking\_budget=512;
+all other phases $\Rightarrow$ temperature=0.7, thinking\_budget=2048.
+
+\begin{lstlisting}[style=py, caption={\_call\_realtime\_api() -- Vertex AI invocation (abridged)}]
+def _call_realtime_api(phase, model, system, user,
+                       max_tokens, retries=10):
+    client = _get_api_client()
+
+    for attempt in range(retries):
+        t0 = time.monotonic()
+        try:
+            is_fitness = (phase == "fitness")
+            response = client.models.generate_content(
+                model=model,
+                contents=user,
+                config=GenerateContentConfig(
+                    system_instruction=system,
+                    max_output_tokens=max_tokens,
+                    temperature=0.0 if is_fitness else 0.7,
+                    thinking_config=ThinkingConfig(
+                        thinking_budget=512 if is_fitness else 2048,
+                    ),
+                ),
+            )
+            elapsed = round(time.monotonic() - t0, 2)
+            text = response.text or ""
+
+            # token accounting -- thinking tokens billed at output rate
+            usage     = response.usage_metadata
+            in_toks   = getattr(usage, "prompt_token_count",     0) or 0
+            out_toks  = getattr(usage, "candidates_token_count", 0) or 0
+            think_toks= getattr(usage, "thoughts_token_count",   0) or 0
+            out_toks += think_toks     # merge thinking into output
+
+            cost = _compute_gemini_cost(model, in_toks, out_toks)
+            tracker.record(phase=phase, model=model,
+                           input_tokens=in_toks, output_tokens=out_toks,
+                           cost_usd=cost)
+
+            if not text.strip():            # empty response -> retry
+                wait = 5 * (2**attempt) + random.uniform(0, 3)
+                time.sleep(wait); continue
+
+            return text                     # SUCCESS
+
+        except Exception as exc:
+            # classify: rate-limit (429), server error (500/503), timeout
+            # all retryable: wait = 5 * 2^attempt + jitter; time.sleep(wait)
+            wait = 5 * (2 ** attempt) + random.uniform(0, 3)
+            time.sleep(wait)
+
+    return None                             # all retries exhausted
+\end{lstlisting}
+
+\begin{concept}{What happens when \fn{\_call\_realtime\_api} raises \fn{LLMCallError}}
+The caller (\fn{generate\_code} etc.) propagates the exception to
+\fn{\_eval\_code\_for\_problem()}, which catches it and returns \fn{(0.0, None)}.
 The problem scores 0; the run continues.  One failed API call does not crash the GA.
 \end{concept}
 
 \section{\fn{generate\_code()} --- Fitness Evaluation}
 
-\begin{spec}{generate\_code(system\_prompt, question, fn\_name) -> str}
-Called by: ga.compute\_fitness() [ga.py:63]; main.evaluate\_on\_holdout() [main.py:52] \\
-Calls: \_call(phase="fitness", model=TARGET\_MODEL, temperature=0.0, max\_tokens=1024)
+\begin{spec}{generate\_code(system\_prompt, question) -> str}
+Called by: ga.\_eval\_code\_for\_problem(); main.evaluate\_on\_holdout() \\
+Calls: \_call\_realtime\_api(phase="fitness", model=TARGET\_MODEL,
+thinking\_budget=512, temperature=0.0)
 \end{spec}
 
 \begin{lstlisting}[style=py]
-def generate_code(system_prompt, question, fn_name):
-    user_msg = f"{question}\n\nWrite a Python function named `{fn_name}`."
-    return _call(
-        phase="fitness",
-        model=config.TARGET_MODEL,      # Haiku 4.5
-        temperature=config.TARGET_TEMPERATURE,  # 0.0 = deterministic
-        max_tokens=config.MAX_CODE_TOKENS,      # 1024
-        system=system_prompt,   # THE CHROMOSOME -- the prompt being evolved
-        user=user_msg,          # problem-specific: changes per problem
+_CODE_GEN_DIRECTIVE = (
+    "\n\n"
+    "ABSOLUTE OUTPUT REQUIREMENT -- NO EXCEPTIONS:\n"
+    "Your entire response must consist of ONLY the raw C++ source code -- "
+    "one complete file, nothing else. Use C++23.\n"
+    "FORBIDDEN:\n"
+    "  * Backtick code fences of any form (no ```, no `, no 'cpp' or 'c++' tags)\n"
+    "  * Markdown formatting of any kind\n"
+    "  * Any text before the code: no explanations, no preamble\n"
+    "  * Any text after the code: no summaries, no notes\n"
+    "The FIRST character of your response must be the first character of the C++ code.\n"
+    "The LAST character must be the last character of the C++ code."
+)
+
+def _build_fitness_user_msg(question: str) -> str:
+    return (
+        f"{question}\n\n"
+        "Write a complete, compilable C++ program that reads from stdin and writes "
+        "the answer to stdout. Include main(). Compile target: g++ -O2 -std=c++23.\n\n"
+        "DO NOT write any explanation, analysis, or reasoning.\n"
+        "DO NOT start with 'Looking at', 'I need to', or any English text.\n"
+        "Your response must begin with #include or int main -- nothing before it."
     )
-# Returns raw LLM text. Code extraction happens in evaluator.extract_code().
-# The separation is intentional: system = general strategy; user = specific problem.
+
+def generate_code(system_prompt, question) -> str:
+    user_msg = _build_fitness_user_msg(question)
+    result = _call(
+        phase="fitness",
+        model=config.TARGET_MODEL,              # gemini-2.5-flash
+        system=system_prompt + _CODE_GEN_DIRECTIVE,
+        user=user_msg,
+        api_max_tokens=config.API_FALLBACK_MAX_TOKENS_CODE,  # 8192
+    )
+    if result is None:
+        raise LLMCallError(
+            f"generate_code: all retries failed (model={config.TARGET_MODEL})")
+    return result
 \end{lstlisting}
 
-\section{\fn{crossover()} --- LLM-Mediated Merge}
-
-\begin{spec}{crossover(prompt\_a, prompt\_b) -> str}
-Called by: ga.breed() [ga.py:117] when rng.random() < 0.8 \\
-Calls: \_call(phase="crossover", model=OPTIMIZER\_MODEL, temperature=0.7, max\_tokens=600)
-\end{spec}
-
-The Optimizer (Sonnet 4.6) receives a meta-prompt asking it to \emph{blend} the two parents
-into one coherent paragraph --- explicitly forbidden from simple concatenation.
-
-\begin{lstlisting}[style=py]
-_CROSSOVER_USER = """
-Combine these two coding-instruction prompts into one coherent prompt.
-Preserve the strongest strategies from each parent.
-Do not simply concatenate -- produce a unified instruction paragraph.
-
---- Parent A ---
-{parent_a}
-
---- Parent B ---
-{parent_b}
-"""
-# Example offspring:
-# "Approach the problem like a competitive programmer: identify the algorithm
-#  pattern. Before coding, explicitly consider boundary conditions: empty
-#  input, zero, negative values. Write the most direct, correct solution."
-\end{lstlisting}
-
-\section{\fn{mutate\_inject()}, \fn{mutate\_delete()}, \fn{mutate\_rephrase()}}
-
-All three call \fn{\_call()} with \fn{OPTIMIZER\_MODEL} at temperature 0.7 and
-\fn{MAX\_OPERATOR\_TOKENS=600}.  The phase label differs for cost tracking.
+\section{\fn{crossover()} and the Three Mutation Operators}
 
 \begin{lstlisting}[style=chain]
-mutate_inject(prompt) -> str             [phase="mutate_inject"]
-  Meta-prompt: "Add one new, specific coding strategy."
-  Examples: 'check for off-by-one errors', 'consider time complexity'
-  Returns: prompt with one new sentence added.
+crossover(prompt_a, prompt_b) -> str        [phase="crossover", OPTIMIZER_MODEL, Pro]
+  _call(phase="crossover", model=OPTIMIZER_MODEL,
+        api_max_tokens=API_FALLBACK_MAX_TOKENS_OPS=700)
+  -- temperature=0.7, thinking_budget=2048 derived from phase != "fitness"
+  System: "You merge coding-instruction prompts. Output ONLY the merged prompt."
+  User:   "Combine ... preserve strongest strategies ...
+           --- Parent A --- {prompt_a}
+           --- Parent B --- {prompt_b}"
 
-mutate_delete(prompt) -> str             [phase="mutate_delete"]
-  Edge case FIRST: if len(re.split(r"(?<=[.!?])\s+", prompt)) <= 1:
-      return prompt   # only one sentence; skip API call, return unchanged
-  Meta-prompt: "Remove the sentence that contributes the least."
-  Returns: leaner prompt with weakest sentence removed.
+mutate_inject(prompt, failure_examples=None) -> str  [phase="mutate_inject", Pro]
+  If failure_examples provided: appends up to 3 formatted failure entries
+  (problem_id, rating, reason, compile_error/expected/actual) to guide the Optimizer.
+  "Add one new, specific coding strategy ... (address at least one failure pattern)"
+  Without failure_examples: generic inject -- "Add one new coding strategy ..."
 
-mutate_rephrase(prompt) -> str           [phase="mutate_rephrase"]
-  Meta-prompt: "Rephrase using different words, keep same meaning."
-  Returns: same strategies, different wording.
+mutate_delete(prompt) -> str               [phase="mutate_delete", Pro]
+  Edge case FIRST: sentences = re.split(r"(?<=[.!?])\s+", prompt)
+  if len(sentences) <= 1: return prompt  # single-sentence prompt; skip API call
+  "Remove one sentence -- the one that contributes the least to code-generation quality."
+
+mutate_rephrase(prompt) -> str             [phase="mutate_rephrase", Pro]
+  "Rephrase using different words, keep same meaning and all same strategies."
+  Output: only the rephrased prompt text (no labels, no markdown).
 \end{lstlisting}
+
+\begin{concept}{\fn{failure\_examples} in \fn{mutate\_inject}}
+Each \fn{Individual} stores up to 5 diverse failure examples
+(\fn{individual.failure\_examples}: a list of problem dicts with question, expected
+output, actual output).  These are passed to \fn{mutate\_inject()} so the Optimizer
+can craft a strategy that specifically addresses the weaknesses the current prompt
+exhibits --- targeted mutation rather than random injection.
+\end{concept}
 
 
 % ==========================================================================
 \chapter{\pyf{ga.py} --- The Genetic Algorithm}
 % ==========================================================================
+
+\section{Logging Infrastructure}
+
+\begin{lstlisting}[style=py]
+# Two log streams per run:
+#   1. progress.log              -- human-readable timeline (thread-safe)
+#   2. evaluations_genNN.jsonl   -- one JSON line per problem evaluation
+
+_progress_log: Path | None = None
+_eval_log_dir: Path | None = None
+_log_lock      = threading.Lock()
+_eval_log_lock = threading.Lock()
+
+def _log(msg, level="INFO"):      # timestamped, level-tagged; prints + appends
+def _debug(msg):                   # shortcut for DEBUG-level entries
+def _log_evaluation(entry):       # appends one JSON line to evaluations_genNN.jsonl
+\end{lstlisting}
 
 \section{\fn{Individual} --- The Chromosome Dataclass}
 
@@ -729,172 +1009,330 @@ class Individual:
     uid:       str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     parent_a:  str = ""        # uid of first parent  (empty for seeds)
     parent_b:  str = ""        # uid of second parent (empty for seeds)
-    operators: str = ""        # e.g. "crossover+inject" or "copy+rephrase"
+    operators: str = ""        # e.g. "crossover+inject" or "seed"
+    intermediate_steps: dict = field(default_factory=dict)
+    # intermediate_steps: per-problem score breakdown populated by compute_fitness
+    failure_examples:   list = field(default_factory=list)
+    # failure_examples: up to 5 {question, expected, actual} dicts from failed tests
 \end{lstlisting}
 
-\section{\fn{compute\_fitness(individual, problems)} $\to$ \fn{float}}
+\section{RNG State Serialisation}
 
-\begin{spec}{compute\_fitness(individual, problems) -> float in [0.0, 1.0]}
-Called by: run() -- 15 times at gen 0; 13 times per generation (gens 1--20) \\
-Calls: llm.generate\_code(), evaluator.extract\_code(), evaluator.run\_tests()
+\begin{lstlisting}[style=py]
+def rng_state_to_dict(state: tuple) -> dict:
+    """Serialise a raw MT19937 state tuple to a JSON-safe dict."""
+    version, internalstate, gauss_next = state
+    return {
+        "version":       version,
+        "internalstate": list(internalstate),   # tuple -> list for JSON
+        "gauss_next":    gauss_next,
+    }
+
+def rng_state_from_dict(d: dict) -> tuple:
+    """Restore raw state tuple from a dict saved by rng_state_to_dict."""
+    return (d["version"], tuple(d["internalstate"]), d["gauss_next"])
+
+# Usage in run():
+#   Save:    checkpoint["rng_state"] = rng_state_to_dict(rng.getstate())
+#   Restore: rng.setstate(rng_state_from_dict(checkpoint["rng_state"]))
+\end{lstlisting}
+
+These functions enable exact reproduction of any resumed run --- the RNG state is
+saved in every \fn{generation\_NN.json} checkpoint so that generation N+1 draws
+the same random numbers whether resumed or run fresh.
+
+\section{\fn{\_eval\_one\_problem()} and \fn{\_eval\_code\_for\_problem()} --- Per-Thread Workers}
+
+Evaluation is split across two functions:
+
+\begin{spec}{\_eval\_one\_problem(gen, individual, prob, idx, total) -> (float, dict|None)}
+Called by: compute\_fitness() via ThreadPoolExecutor \\
+Calls: llm.generate\_code(), then \_eval\_code\_for\_problem()
 \end{spec}
 
 \begin{lstlisting}[style=chain]
-compute_fitness(individual, problems):
-  total = 0.0
-  for prob in problems:       # 100 iterations
+_eval_one_problem(gen, individual, prob, idx, total):
+  time.sleep(random.uniform(0, 1))   # stagger concurrent API requests
 
-    response = llm.generate_code(         [llm.py:77]
-                   individual.prompt,
-                   prob["question"],
-                   prob["fn_name"])
-               -> _call("fitness", Haiku, T=0.0, max=1024, ...)
-               -> tracker.record(tokens)
-               -> returns raw LLM text
+  t_llm = time.monotonic()
+  try:
+      response = llm.generate_code(individual.prompt, prob["question"])
+  except LLMCallError as exc:
+      llm_time = round(monotonic() - t_llm, 3)
+      return _eval_code_for_problem(gen, individual, prob, idx, total,
+                                    None, llm_time)   # None = infra failure
 
-    code = evaluator.extract_code(response)   [evaluator.py:24]
-               -> returns code string
-
-    score = evaluator.run_tests(              [evaluator.py:84]
-                code, prob["fn_name"],
-                prob["inputs"], prob["outputs"], timeout=5)
-               -> has_function() check
-               -> _build_script() assembles harness
-               -> subprocess.run() executes
-               -> parse __R__: lines
-               -> returns float [0.0, 1.0]
-
-    total += score
-
-  return total / len(problems)   # mean partial credit across 100 problems
+  llm_time = round(monotonic() - t_llm, 3)
+  return _eval_code_for_problem(gen, individual, prob, idx, total,
+                                response, llm_time)
 \end{lstlisting}
 
-\begin{warn}{Expensive operation}
-One call to \fn{compute\_fitness()} makes \textbf{100 Haiku API calls}.
-At $\sim$\$0.0005 per call, evaluating one individual costs $\sim$\$0.05.
-Evaluating all 275 individuals in a full run costs $\sim$\$13--25.
-\end{warn}
+\begin{spec}{\_eval\_code\_for\_problem(gen, individual, prob, idx, total, response\_text, llm\_time\_s) -> (float, dict|None)}
+Called by: \_eval\_one\_problem() \\
+Calls: evaluator.extract\_code(), evaluator.run\_tests\_verbose(), \_log\_evaluation()
+\end{spec}
 
-\section{\fn{tournament\_select(population, rng)} $\to$ \fn{Individual}}
+\begin{lstlisting}[style=chain]
+_eval_code_for_problem(gen, individual, prob, idx, total, response_text, llm_time_s):
+  if response_text is None:             # infra failure path
+      _log_evaluation({..., score:-1.0, reason:"infra_failure"})
+      return (-1.0, None)
 
-\begin{spec}{tournament\_select(population, rng) -> Individual}
-Called by: run() -- twice per offspring [ga.py:199--200] \\
-Calls: rng.sample(population, 3), max(..., key=fitness)
+  code = evaluator.extract_code(response_text); del response_text
+
+  if not code or not code.strip():
+      test_result = {score:0.0, reason:"empty_response", ...}
+  else:
+      test_result = evaluator.run_tests_verbose(code, prob["inputs"],
+                                                prob["outputs"], EXEC_TIMEOUT)
+
+  _log_evaluation({ts, generation, individual_uid, individual_operators,
+                   system_prompt, problem_id, problem_rating, llm_call_time_s,
+                   extracted_code, compile, test_cases, tests_total, tests_run,
+                   early_stopped, total_test_time_s, score, score_reason})
+  del entry, code
+
+  # build failure_example if score < 1.0 (and not infra_failure)
+  failure_example = {problem_id, rating, reason,
+                     expected[:200], actual[:200], compile_error[:200]}
+
+  return (test_result["score"], failure_example)   # (float, dict|None)
+\end{lstlisting}
+
+\section{\fn{\_assign\_failure\_examples(ind, collected\_failures)}}
+
+\begin{spec}{\_assign\_failure\_examples(ind, collected\_failures) -> None}
+Called by: compute\_fitness() after all threads complete \\
+Modifies: ind.failure\_examples (up to 5 diverse examples)
+\end{spec}
+
+Selects up to 5 failure examples from \fn{collected\_failures}, prioritising
+diversity by failure reason using a priority ordering:
+
+\begin{lstlisting}[style=py]
+def _assign_failure_examples(individual, collected_failures):
+    _reason_priority = {
+        "compile_fail":        0,   # highest priority -- fix compilation first
+        "all_fail":            1,
+        "all_fail_early_stop": 1,
+        "partial_pass":        2,   # lowest priority
+    }
+    collected_failures.sort(
+        key=lambda f: _reason_priority.get(f["reason"], 3))
+    seen_reasons: set[str] = set()
+    diverse: list[dict] = []
+    for f in collected_failures:
+        if f["reason"] not in seen_reasons or len(diverse) < 3:
+            diverse.append(f)
+            seen_reasons.add(f["reason"])
+        if len(diverse) >= 5:
+            break
+    individual.failure_examples = diverse
+\end{lstlisting}
+
+Compile failures are prioritised highest --- a prompt that produces uncompilable
+code should address that before worrying about partial passes.  After sorting,
+each unique failure reason is admitted first; once \fn{diverse} has 3+ entries,
+only new reasons are admitted until the cap of 5 is reached.  These are stored
+on the \fn{Individual} and passed to \fn{llm.mutate\_inject()} to target real
+weaknesses.
+
+\section{\fn{compute\_fitness()} $\to$ \fn{float}}
+
+\begin{spec}{compute\_fitness(gen, individual, problems) -> float in [0.0, 1.0]}
+Called by: run() -- 5 times at gen 0; 5 times per generation (gens 1--12)
 \end{spec}
 
 \begin{lstlisting}[style=py]
-contestants = rng.sample(population, config.TOURNAMENT_SIZE)  # 3 draws, no replace
-return max(contestants, key=lambda ind: ind.fitness)
-# The fittest of 3 random draws becomes a parent.
-# Weaker individuals can win if stronger ones are not drawn.
-# This balances exploitation (best usually wins) with exploration.
+def compute_fitness(gen, individual, problems):
+    scores = [0.0] * len(problems)
+    collected_failures = []
+    _failures_lock = threading.Lock()
+
+    with ThreadPoolExecutor(max_workers=config.PARALLEL_EVALS) as executor:
+        futures = {
+            executor.submit(
+                _eval_one_problem, gen, individual, prob, i, len(problems)
+            ): i
+            for i, prob in enumerate(problems)
+        }
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                score, failure_example = future.result()
+                scores[idx] = score
+                if failure_example is not None:
+                    with _failures_lock:
+                        collected_failures.append(failure_example)
+            except Exception as exc:
+                scores[idx] = -1.0
+
+    _assign_failure_examples(individual, collected_failures)
+    return sum(scores) / len(scores)
 \end{lstlisting}
 
-\section{\fn{breed(parent\_a, parent\_b, rng)} $\to$ \fn{Individual}}
+\begin{warn}{Expensive operation}
+One call to \fn{compute\_fitness()} makes \textbf{65 Gemini Flash API calls}.
+With \fn{PARALLEL\_EVALS=5}, these run in 5-wide batches.  Evaluating all
+$5 \times 13 = 65$ new individuals in a full run (including gen 0 seeds) takes
+several hours.
+\end{warn}
 
-\begin{spec}{breed(parent\_a, parent\_b, rng) -> Individual (fitness=-1.0)}
-Called by: run() [ga.py:201] -- 13 times per generation \\
-Calls: llm.crossover() OR rng.choice(), then optionally llm.mutate\_inject/delete/rephrase()
-\end{spec}
+\section{\fn{tournament\_select}, \fn{roulette\_select}, and \fn{breed}}
 
 \begin{lstlisting}[style=chain]
-breed(parent_a, parent_b, rng):
+tournament_select(population, rng):
+  contestants = rng.sample(population, TOURNAMENT_SIZE=3)
+  return max(contestants, key=lambda ind: ind.fitness)
 
-  [STEP 1 -- Crossover or copy]
+roulette_select(population, rng):
+  fitnesses = [max(ind.fitness, 0.0) for ind in population]
+  total = sum(fitnesses)
+  if total == 0:                    # all fitnesses zero: fall back to uniform
+      return rng.choice(population)
+  r = rng.uniform(0, total)
+  cumulative = 0.0
+  for ind, f in zip(population, fitnesses):
+      cumulative += f
+      if cumulative >= r:
+          return ind
+  return population[-1]             # fallback if floating-point rounds short
+
+breed(parent_a, parent_b, rng, allow_mutation=True):
+  [BUILD COMBINED FAILURE LIST -- deduplicated union from both parents]
+  combined_failures = []
+  seen_ids = set()
+  for f in (parent_a.failure_examples + parent_b.failure_examples):
+      if f["problem_id"] not in seen_ids:
+          combined_failures.append(f); seen_ids.add(f["problem_id"])
+  combined_failures = combined_failures[:5]
+
+  [CROSSOVER or COPY]
   if rng.random() < 0.80:
-      prompt = llm.crossover(parent_a.prompt, parent_b.prompt)
-               -> _call("crossover", Sonnet, T=0.7, max=600, ...)
-               -> returns merged prompt string
-      ops = ["crossover"]
+      prompt = llm.crossover(parent_a.prompt, parent_b.prompt); ops=["crossover"]
   else:
-      prompt = rng.choice([parent_a.prompt, parent_b.prompt])
-      ops = ["copy"]
+      prompt = rng.choice([parent_a.prompt, parent_b.prompt]); ops=["copy"]
 
-  [STEP 2 -- Inject? (independent roll)]
-  if rng.random() < 0.25:
-      prompt = llm.mutate_inject(prompt)
-               -> _call("mutate_inject", Sonnet, T=0.7, max=600, ...)
-      ops.append("inject")
+  [MUTATIONS -- only if allow_mutation is True]
+  if allow_mutation:
+      if rng.random() < 0.25:
+          prompt = llm.mutate_inject(prompt, combined_failures)
+          ops += ["inject"]
+      if rng.random() < 0.15:
+          prompt = llm.mutate_delete(prompt); ops += ["delete"]
+      if rng.random() < 0.10:
+          prompt = llm.mutate_rephrase(prompt); ops += ["rephrase"]
 
-  [STEP 3 -- Delete? (independent roll)]
-  if rng.random() < 0.15:
-      prompt = llm.mutate_delete(prompt)   # may skip _call if 1 sentence
-      ops.append("delete")
-
-  [STEP 4 -- Rephrase? (independent roll)]
-  if rng.random() < 0.10:
-      prompt = llm.mutate_rephrase(prompt)
-               -> _call("mutate_rephrase", Sonnet, T=0.7, max=600, ...)
-      ops.append("rephrase")
-
-  return Individual(
-      prompt=prompt,
-      parent_a=parent_a.uid,          # genealogy tracking
-      parent_b=parent_b.uid,
-      operators="+".join(ops),        # e.g. "crossover+inject" or "copy"
-  )
-  # fitness = -1.0 (sentinel; run() calls compute_fitness() separately)
+  return Individual(prompt, parent_a=parent_a.uid, parent_b=parent_b.uid,
+                    operators="+".join(ops))   # fitness=-1.0 (unevaluated)
 \end{lstlisting}
 
-\section{\fn{run(seed\_prompts, problems, on\_generation=None)}}
+\section{\fn{run()} --- The GA Loop}
 
-\begin{spec}{run(...) -> (best\_Individual, history: list[dict])}
-Called by: main.main() [main.py:120] \\
-Calls: compute\_fitness(), tournament\_select(), breed(), on\_generation callback
+\begin{spec}{run(seed\_prompts, problems, run\_dir, on\_generation,
+resume\_population, resume\_start\_gen, resume\_history, resume\_rng\_state,
+selection\_scheme="tournament", elitism\_count=None)
+-> (best\_Individual, history: list[dict])}
+Called by: main.main()
 \end{spec}
 
 \begin{lstlisting}[style=chain]
-run(seed_prompts, problems, on_generation):
+run(seed_prompts, problems, run_dir, on_generation,
+    resume_population=None, resume_start_gen=0,
+    resume_history=None, resume_rng_state=None,
+    selection_scheme="tournament", elitism_count=None):
 
-  rng = random.Random(42)    # seeded; reproducible across runs
-  population = [Individual(prompt=p) for p in seed_prompts]  # 15 individuals
+  _progress_log = run_dir / "progress.log"
+  _eval_log_dir = run_dir
+  history = resume_history or []
 
-  [GEN 0] for each ind in population:
-      ind.fitness = compute_fitness(ind, problems)    # 15 x 100 = 1500 API calls
+  [RESOLVE SELECTION SCHEME]
+  _scheme = selection_scheme.lower()
+  _select = roulette_select if _scheme == "roulette" else tournament_select
+  _elitism = elitism_count if elitism_count is not None else config.ELITISM_COUNT
 
-  [GENS 1..20] for gen in range(1, 21):
+  rng = random.Random(config.RANDOM_SEED)   # seeded MT19937
 
+  if resume_population:
+      population = resume_population        # restore from checkpoint
+      rng.setstate(rng_state_from_dict(resume_rng_state))  # exact MT19937 restore
+      loop_start = resume_start_gen + 1
+  else:
+      population = [Individual(prompt=p, operators="seed")
+                    for p in seed_prompts[:POPULATION_SIZE]]
+      # Per-seed crash recovery: reload any seed_NN_*.json checkpoints
+      # from a previous interrupted gen-0 evaluation
+      for i, ind in enumerate(population):
+          if <seed checkpoint exists for seed i>:
+              restore ind.uid, ind.fitness, ind.failure_examples from ckpt
+          else:
+              ind.fitness = compute_fitness(0, ind, problems)
+              write seed checkpoint: {seed_idx, uid, fitness, failure_examples}
+      loop_start = 1
+
+  [GENS loop_start..GENERATIONS]
+  stagnation_count = 0
+  for gen in range(loop_start, GENERATIONS + 1):
       population.sort(by fitness, descending)
+      stats = {generation:gen-1, best, mean, worst, std, cv, best_uid, best_prompt}
+      history.append(stats)
 
-      stats = {generation: gen-1, best, mean, worst, best_uid, best_prompt}
-      history.append(stats)       # records state of PREVIOUS generation
+      [CONVERGENCE CHECK]
+      cv = std / mean  (if mean > CONVERGENCE_MIN_MEAN, else -1.0)
+      if cv >= 0 and cv < CONVERGENCE_CV_THRESHOLD:
+          stagnation_count += 1
+          if stagnation_count >= CONVERGENCE_PATIENCE:
+              break   # early stop
+      else:
+          stagnation_count = 0
 
       if on_generation:
-          on_generation(gen-1, population, stats)
-          # = main.save_checkpoint(run_dir, gen-1, pop, stats)
-          # Writes: results/run_*/generation_NN.json
+          on_generation(gen-1, population, stats, rng.getstate())  # saves generation_NN.json
 
-      new_pop = population[:2]    # ELITISM: top 2 carried unchanged
+      [ELITISM -- copy top _elitism individuals unchanged]
+      new_pop = population[:_elitism]   # typically 0 (tournament/roulette) or 1 (elitism scheme)
 
-      while len(new_pop) < 15:    # breed 13 new offspring
-          p1 = tournament_select(population, rng)
-          p2 = tournament_select(population, rng)
-          child = breed(p1, p2, rng)               # 0-4 Sonnet calls
-          new_pop.append(child)
+      [BREED n_offspring = POPULATION_SIZE - _elitism offspring]
+      offspring_idx = 0
+      while len(new_pop) < POPULATION_SIZE:
+          p1 = _select(population, rng)   # tournament or roulette per --scheme
+          p2 = _select(population, rng)
+          allow_mut = (offspring_idx >= CROSSOVER_ONLY_SLOTS)  # first 2: crossover only
+          child = breed(p1, p2, rng, allow_mutation=allow_mut)
+          new_pop.append(child); offspring_idx += 1
 
-      for ind in new_pop[2:]:     # evaluate only the 13 NEW offspring
-          ind.fitness = compute_fitness(ind, problems)   # 13 x 100 = 1300 calls
+      [EVALUATE offspring only (elites already have valid fitness)]
+      for ind in new_pop[_elitism:]:
+          ind.fitness = compute_fitness(gen, ind, problems)
 
       population = new_pop
 
-  [FINAL]
-  population.sort(by fitness, descending)
-  history.append({generation: 20, ...})   # 21st record
-
-  return (population[0], history)         # best prompt + 21-entry history
+  [FINAL] population.sort()
+  history.append({generation:last_completed_gen, ...})
+  return (population[0], history)
 \end{lstlisting}
 
-\begin{concept}{Generational replacement}
-The entire population is replaced each generation (except the 2 elites).  This is
-\textbf{full generational replacement}: only the top 2 are guaranteed to survive.
-It creates strong selection pressure and fast convergence at the cost of some diversity.
+\begin{concept}{Three selection schemes (\fn{--scheme} argument)}
+\fn{tournament} (default): sample 3 individuals at random, pick the fittest.
+Balances exploitation with exploration; independent of absolute fitness values.\\
+\fn{roulette}: fitness-proportionate selection; probability of picking an individual
+is proportional to its fitness.  Falls back to uniform random when all fitnesses
+are zero.\\
+\fn{elitism}: tournament selection + 1 elite individual copied unchanged each
+generation (\fn{elitism\_count=1}).  Guarantees the best-ever individual survives.
 \end{concept}
 
-\begin{concept}{History records}
-\fn{history} has 21 entries (generations 0--20).  Each entry has:
-\fn{generation}, \fn{best}, \fn{mean}, \fn{worst}, \fn{best\_uid}, \fn{best\_prompt}.
-Generations 0--19 are recorded at the \emph{start} of the next breeding step;
-generation 20 is recorded after the loop ends.
+\begin{concept}{Convergence detection (CV)}
+The coefficient of variation $CV = \sigma / \mu$ measures population homogeneity.
+When $CV < 0.01$ (less than 1\% variation) for 3 consecutive generations and
+$\mu > 0.01$ (not a trivial all-fail population), the GA stops early.
+This prevents wasting API budget on a converged population.
+\end{concept}
+
+\begin{concept}{Per-seed checkpoints for crash recovery}
+Each seed's fitness is saved to \fn{seed\_NN\_\textless uid\textgreater.json} before
+moving to the next seed.  If the run crashes midway through gen-0 evaluation, it
+re-loads completed seeds from disk rather than re-evaluating them.
 \end{concept}
 
 
@@ -902,197 +1340,222 @@ generation 20 is recorded after the loop ends.
 \chapter{\pyf{main.py} --- Orchestration \& Entry Point}
 % ==========================================================================
 
-\section{The Three Functions}
+\section{The Key Functions}
 
-\subsection{\fn{save\_checkpoint(run\_dir, gen, population, stats)}}
+\subsection{Vertex AI Preflight (replaces \fn{\_check\_cli()})}
+
+\begin{spec}{Vertex AI credential check in main()}
+Called at startup, before dataset loading \\
+Calls: Path.exists(), \_get\_api\_client() (via llm module import)
+\end{spec}
+
+Instead of checking for the \fn{claude} CLI executable, \fn{main()} verifies that
+\fn{config.SERVICE\_ACCOUNT\_PATH} (\fn{service-account.json}) exists on disk.  It
+then imports \fn{llm}, which triggers \fn{\_get\_api\_client()} --- if the service
+account is invalid or the project lacks Vertex AI permissions, the error surfaces
+immediately before any dataset work.
+
+\subsection{\fn{\_find\_latest\_run(results\_dir)} and \fn{\_load\_resume\_state()}}
+
+\begin{spec}{\_find\_latest\_run(results\_dir) -> Path | None}
+Called by: main() when \fn{--resume} flag is given without an explicit path \\
+Returns: the most recently modified run directory under \fn{results/}
+\end{spec}
+
+\begin{spec}{\_load\_resume\_state(run\_dir) -> dict}
+Called by: main() after finding the run to resume \\
+Returns: \{population, start\_gen, history, rng\_state\} loaded from the latest
+generation\_NN.json checkpoint
+\end{spec}
+
+Resume support allows a crashed run to continue from the last saved generation,
+replaying \fn{calls.jsonl} into \fn{tracker.restore\_from\_jsonl()} to restore
+accurate running cost totals.
+
+\subsection{\fn{save\_checkpoint(run\_dir, gen, population, stats, rng)}}
 
 \begin{spec}{save\_checkpoint(...)}
-Called by: the on\_generation lambda in main() [main.py:123] \\
-Calls: json.dumps(), Path.write\_text() \\
+Called by: the on\_generation lambda in main() \\
 Output: results/run\_*/generation\_NN.json
 \end{spec}
 
-Saves the full population state (all 15 prompts, fitnesses, parent UIDs, operators)
-after each generation.  If the run crashes at generation 15, at most one generation of
-API spending is lost.
+Saves the full population state (all 5 prompts, fitnesses, parent UIDs, operators,
+\fn{failure\_examples}, \fn{intermediate\_steps}) plus the RNG state after each
+generation.  The RNG state (MT19937 internals) is serialised via
+\fn{rng\_state\_to\_dict()} so that a resumed run produces identical subsequent draws.
 
 \subsection{\fn{evaluate\_on\_holdout(best\_prompt, holdout)} $\to$ \fn{float}}
 
-\begin{spec}{evaluate\_on\_holdout(best\_prompt, holdout) -> float}
-Called by: main() [main.py:139] \\
-Calls: llm.generate\_code(), evaluator.extract\_code(), evaluator.run\_tests() \\
-Same pipeline as compute\_fitness() but over 200 holdout problems.
+\begin{spec}{evaluate\_on\_holdout(best\_prompt, holdout, run\_dir) -> float}
+Called by: main() \\
+Calls: ThreadPoolExecutor, llm.generate\_code(), evaluator.extract\_code(),
+evaluator.run\_tests\_verbose(); writes holdout\_evaluations.jsonl
 \end{spec}
 
-Structurally identical to \fn{compute\_fitness()} but runs on the 200 held-out problems
-and prints progress every 50.  Returns the mean partial-credit score.
+Now runs \textbf{in parallel} using \fn{ThreadPoolExecutor(max\_workers=PARALLEL\_EVALS)}
+(was sequential in the previous version).  Evaluates all 200 held-out problems with
+the best evolved prompt; returns the mean partial-credit score.
 
-\subsection{\fn{main()} --- The 7-Step Pipeline}
+\subsection{\fn{main()} --- The 8-Step Pipeline}
 
 \begin{lstlisting}[style=chain]
 main():
 
+  [0] Parse CLI args
+      --resume [RUN_DIR]          (optional: resume from crash)
+      --scheme {tournament|roulette|elitism}  (default: "tournament")
+      --help
+
   [1] Pre-flight checks
-      if not config.ANTHROPIC_API_KEY: sys.exit(1)
-      if not config.APPS_TRAIN.exists(): sys.exit(1)
-      # Fails fast BEFORE any expensive operations
+      verify SERVICE_ACCOUNT_PATH exists
+      verify APPS_TRAIN / APPS_TEST paths exist (or warn)
+      verify Vertex AI connectivity (lazy via llm module init)
 
   [2] Load and split dataset
-      all_problems = dataset.load_problems(config.APPS_TRAIN)    # ~2346 dicts
-      evolution_pool, holdout, rest = dataset.split(
-          all_problems, 100, 200, seed=42)
+      all_problems = dataset.load_problems()          # 305 Codeforces problems
+      evolution_pool, holdout, _ = dataset.split(
+          all_problems, evolution_size=65,
+          holdout_size=200, seed=42)
 
-  [3] Create timestamped run directory
-      run_dir = config.RESULTS_DIR / "run_YYYYMMDD_HHMMSS"
-      run_dir.mkdir(parents=True, exist_ok=True)
+  [3] Create timestamped run directory (or locate existing for resume)
+      run_dir = RESULTS_DIR / "run_YYYYMMDD_HHMMSS_<scheme>"
+                e.g. "run_20240501_143022_tournament"
       Writes: config.json           (hyperparameter snapshot)
-              evolution_ids.json    (which 100 problem IDs)
+              evolution_ids.json    (which 65 problem IDs)
 
-  [4] Run GA
+  [4] Initialise logging and cost tracking
+      tracker.set_log_path(run_dir / "calls.jsonl")
+      tracker.set_live_path(run_dir / "costs_live.json")
+      tracker.set_costs_live_path(COSTS_DIR / f"cost_{run_dir.name}.json")
+      llm.set_error_log_path(run_dir / "llm_errors.log")
+      if resuming: tracker.restore_from_jsonl(run_dir / "calls.jsonl")
+
+  [5] Run GA
+      resume_state = _load_resume_state(run_dir) if resuming else {}
       best, history = ga.run(
-          seed_prompts=SEED_PROMPTS,
+          seed_prompts=SEED_PROMPTS[:POPULATION_SIZE],   # first 5
           problems=evolution_pool,
-          on_generation=lambda gen, pop, stats:
-              save_checkpoint(run_dir, gen, pop, stats))
-      # Takes hours; checkpoints every generation
+          run_dir=run_dir,
+          on_generation=_on_generation,    # saves generation_NN.json + logs cost
+          resume_population= resume_state["population"]  if resume_state else None,
+          resume_start_gen=  resume_state["start_gen"]   if resume_state else 0,
+          resume_history=    resume_state["history"]     if resume_state else None,
+          resume_rng_state=  resume_state["rng_state"]   if resume_state else None,
+          selection_scheme=args.scheme,
+          elitism_count=1 if args.scheme == "elitism" else None)
 
-  [5] Save results
+  [6] Save results
       (run_dir / "history.json").write_text(json.dumps(history))
       (run_dir / "best_prompt.txt").write_text(best.prompt)
 
-  [6] Holdout evaluation
+  [7] Holdout evaluation (parallel)
       holdout_fitness = evaluate_on_holdout(best.prompt, holdout)
-      # 200 more Haiku calls; measures generalisation to unseen problems
+      (run_dir / "summary.json").write_text({
+          elapsed_minutes, best_prompt, best_fitness_evolution,
+          best_fitness_holdout, best_uid, total_generations,
+          resumed, selection_scheme})
 
-  [7] Save cost report
-      tracker.flush(extra={fitnesses, run_dir, ...})
-      -> Writes: Code/Costs/cost_TIMESTAMP.json
+  [8] Genealogy report + cost flush
+      genealogy.generate_report(run_dir, best.uid)
+      -> run_dir/genealogy_report.txt, run_dir/genealogy_tree.json
+      tracker.flush(extra={...}) -> Code/Costs/cost_TIMESTAMP.json
 \end{lstlisting}
 
 \section{Output Files}
 
 \begin{center}
-\begin{tabular}{@{}p{4.8cm}p{7.5cm}@{}}
+\begin{tabular}{@{}p{5.5cm}p{6.7cm}@{}}
 \toprule
 \textbf{File} & \textbf{Contents} \\
 \midrule
-\fn{run\_*/config.json}          & Exact hyperparameters (reproducibility) \\
-\fn{run\_*/evolution\_ids.json}  & The 100 problem IDs used as the fitness pool \\
-\fn{run\_*/generation\_NN.json}  & Full population per generation (genealogy) \\
-\fn{run\_*/history.json}         & Best / mean / worst fitness, 21 records \\
-\fn{run\_*/best\_prompt.txt}     & The evolved prompt (main artefact) \\
-\fn{run\_*/summary.json}         & Final fitnesses (evolution + holdout), runtime \\
-\fn{Costs/cost\_*.json}          & Token counts and dollar cost breakdown \\
+\fn{run\_*/config.json}              & Exact hyperparameters (reproducibility) \\
+\fn{run\_*/evolution\_ids.json}      & The 65 problem IDs used as the fitness pool \\
+\fn{run\_*/calls.jsonl}              & Per-call token + cost log (streaming JSONL) \\
+\fn{run\_*/costs\_live.json}         & Live running-total cost summary \\
+\fn{run\_*/llm\_errors.log}          & API retry / error events \\
+\fn{run\_*/progress.log}             & Human-readable timestamped timeline \\
+\fn{run\_*/evaluations\_genNN.jsonl} & Per-problem full evaluation records \\
+\fn{run\_*/seed\_NN\_\textless uid\textgreater.json} & Per-seed gen-0 checkpoint (crash recovery) \\
+\fn{run\_*/generation\_NN.json}      & Full population + RNG state per generation \\
+\fn{run\_*/history.json}             & Best / mean / worst fitness per generation \\
+\fn{run\_*/best\_prompt.txt}         & The evolved prompt (main artefact) \\
+\fn{run\_*/holdout\_evaluations.jsonl} & Per-problem results for the 200 holdout problems \\
+\fn{run\_*/summary.json}             & Final fitnesses (evolution + holdout), scheme, runtime \\
+\fn{run\_*/genealogy\_report.txt}    & Human-readable prompt ancestry chain \\
+\fn{run\_*/genealogy\_tree.json}     & Full ancestry tree in JSON \\
+\fn{Costs/cost\_*.json}              & Final token counts and estimated cost breakdown per run \\
+\fn{Costs/cost\_\textless run\_name\textgreater.json} & Live cost summary updated after every API call (named after run dir) \\
 \bottomrule
 \end{tabular}
 \end{center}
 
 
 % ==========================================================================
-\chapter{Complete Worked Example}
+\chapter{\pyf{genealogy.py} --- Ancestry Tracing}
 % ==========================================================================
 
-This chapter traces one problem from disk to a fitness score using realistic data.
+\section{Purpose}
 
-\section{The Problem on Disk}
+After a GA run completes, \pyf{genealogy.py} traces the lineage of the best evolved
+prompt back through all checkpoints to its seed ancestor.  The output is both a
+human-readable report and a JSON tree.
 
-\begin{lstlisting}[style=py]
-# metadata.json:  {"difficulty": "introductory", "url": "https://codewars.com/..."}
-# question.txt:   "Complete the function that takes an array of words.
-#                  Concatenate the nth letter from each word using the
-#                  enumerating order (1-indexed). Use '#' if too short.
-#                  nth_char(['yoda','best','has']) == 'oes'"
-# input_output.json:
-{
-    "fn_name": "nth_char",
-    "inputs":  [ [["yoda","best","has"]], [["a","bc","def"]] ],
-    "outputs": [ ["oes"], ["abd"] ]
-}
-\end{lstlisting}
-
-After \fn{load\_problems()} the dict is:
-\fn{\{"id":"3715","question":"...","fn\_name":"nth\_char","inputs":[...],"outputs":[...]\}}
-
-\section{Fitness Evaluation: Step by Step}
-
-\textbf{Step 1 --- \fn{llm.generate\_code()} is called:}
-\begin{lstlisting}[style=py]
-# system = "Think like a competitive programmer..."  (the chromosome)
-# user   = "Complete the function that takes an array of words...\n\n"
-#           "Write a Python function named `nth_char`."
-# -> _call(phase="fitness", model="claude-haiku-4-5-20251001", temperature=0.0, ...)
-# -> tracker.record("fitness", "claude-haiku-4-5-20251001", 287, 52)
-#    input_cost = 287*1.00/1e6 = $0.000287; output_cost = 52*5.00/1e6 = $0.000260
-# Returns raw text:
-raw = "```python\ndef nth_char(words):\n    return ''.join(\n        word[i] if i < len(word) else '#'\n        for i, word in enumerate(words, 1))\n```"
-\end{lstlisting}
-
-\textbf{Step 2 --- \fn{evaluator.extract\_code()} strips the markdown:}
-\begin{lstlisting}[style=py]
-code = "def nth_char(words):\n    return ''.join(\n        word[i] if i < len(word) else '#'\n        for i, word in enumerate(words, 1))"
-\end{lstlisting}
-
-\textbf{Step 3 --- \fn{evaluator.run\_tests()} executes the harness:}
-\begin{lstlisting}[style=py]
-# has_function check: re.search(r"\bdef\s+nth_char\s*\(", code) -> True
-
-# _build_script() produces (simplified):
-# "...def nth_char(words): ...\n"
-# "__run__([['yoda','best','has']], ['oes'])\n"
-# "__run__([['a','bc','def']], ['abd'])\n"
-
-# subprocess.run([python3, "-c", script], timeout=5)
-#   Test 1: nth_char(['yoda','best','has'])
-#     enumerate(words, 1): (1,"yoda"),(2,"best"),(3,"has")
-#     word[1]='o', word[2]='e', word[3]='s'  => "oes"
-#     [result]==["oes"] -> True  -> stdout: "__R__:1"
-#   Test 2: nth_char(['a','bc','def'])
-#     word[1]='a', word[2]='b', word[3]='d'  => "abd"
-#     ["abd"]==["abd"] -> True  -> stdout: "__R__:1"
-
-# proc.stdout = "__R__:1\n__R__:1\n"
-# results = [1, 1]
-# score = sum([1,1]) / len(inputs) = 2/2 = 1.0
-\end{lstlisting}
-
-\textbf{Step 4 --- Score accumulates in \fn{compute\_fitness()}:}
-
-This problem contributes 1.0 to \fn{total}.  After all 100 problems,
-\fn{fitness = total / 100}.  If the competitive-programmer prompt
-scores 1.0 on 73 problems and partial credit on others, the overall
-fitness might be 0.7312.  This is stored as \fn{individual.fitness = 0.7312}.
-
-\section{After All 15 Seeds Are Evaluated}
+\section{The Three Core Functions}
 
 \begin{lstlisting}[style=chain]
-Gen 0 population (sorted by fitness, example):
-  uid=a3f7c2b1  fitness=0.7312  prompt="Think like competitive programmer..."
-  uid=c9b2d3f0  fitness=0.7108  prompt="You are an expert Python programmer..."
-  uid=e1f4a2b8  fitness=0.6893  prompt="Approach step by step..."
-  ...
-  uid=d7e1f3c2  fitness=0.5920  prompt="Write clean, readable Python code..."
+_load_all_individuals(run_dir) -> dict[uid, dict]
+  Scans run_dir for all generation_NN.json checkpoint files.
+  Builds a registry: {uid: {prompt, fitness, parent_a, parent_b,
+                            operators, generation}}.
+  Later generations overwrite earlier entries for the same uid (fitness may
+  have been updated by re-evaluation on resume).
 
-Stats for gen 0: best=0.7312, mean=0.6841, worst=0.5920
-save_checkpoint() writes: results/run_*/generation_00.json
+_collect_lineage(uid, registry) -> list[dict]
+  Walks the parent_a chain from the best individual back to a seed.
+  A seed has parent_a == "" (empty string).
+  Returns a list of individual dicts ordered from seed to best.
 
-Elitism: new_pop = [a3f7c2b1, c9b2d3f0]   (top 2 kept unchanged)
+_collect_full_tree(uid, registry, depth=0) -> dict
+  Recursively collects both parents (parent_a and parent_b) at each node.
+  Depth-limited to 40 to prevent infinite loops from any cycle in the graph.
+  Returns a nested dict suitable for JSON serialisation.
 
-Breed 13 offspring:
-  tournament draws e.g. p1=a3f7c2b1, p2=c9b2d3f0
-  rng.random()=0.61 < 0.80 => crossover
-      llm.crossover(prompt_a, prompt_b) -> Sonnet merges them
-  rng.random()=0.18 < 0.25 => inject
-      llm.mutate_inject(merged) -> adds "check time complexity"
-  rng.random()=0.73 >= 0.15 => no delete
-  rng.random()=0.84 >= 0.10 => no rephrase
-  child: operators="crossover+inject", fitness=-1.0
-
-  compute_fitness(child, problems)  -> 100 Haiku calls -> e.g. fitness=0.7589
-
-... repeat for all 13 offspring ...
-After evaluation: population = [2 elites] + [13 evaluated offspring]
-Gen 1 complete.  20 generations in total.
+generate_report(run_dir, best_uid) -> None
+  Entry point called by main.main().
+  1. _load_all_individuals(run_dir)
+  2. _collect_lineage(best_uid, registry)    -> linear chain
+  3. _collect_full_tree(best_uid, registry)  -> full ancestry tree
+  4. Writes run_dir/genealogy_report.txt  (human-readable text)
+  5. Writes run_dir/genealogy_tree.json   (full tree dict)
 \end{lstlisting}
+
+\section{Genealogy Report Format}
+
+\begin{lstlisting}[style=chain]
+=== Genealogy Report ===
+Best individual: uid=a3f2c1b9  fitness=0.7231  generation=11
+
+Linear ancestry (seed -> best):
+  Gen 0  uid=seed_1   fitness=0.4102  operators=seed
+         prompt: "Solve the following C++ competitive programming..."
+  Gen 3  uid=b2d44f1a fitness=0.5810  operators=crossover+inject
+         parents: [seed_1 x seed_3]
+         prompt: "Analyse the problem carefully. Consider time..."
+  ...
+  Gen 11 uid=a3f2c1b9 fitness=0.7231  operators=crossover+inject
+         parents: [e1f2a3b4 x c5d6e7f8]
+         prompt: "You are a competitive programmer. First identify..."
+
+Full ancestry tree written to: run_dir/genealogy_tree.json
+\end{lstlisting}
+
+\begin{concept}{Why genealogy matters}
+The linear ancestry chain shows which genetic operations were most productive.
+If the best prompt descends through 3 consecutive \fn{crossover+inject} operations,
+that suggests inject mutations are the key driver.  If the chain is mostly
+\fn{crossover+copy}, injection may not be contributing.  This guides future
+hyperparameter choices.
+\end{concept}
 
 
 % ==========================================================================
@@ -1100,67 +1563,115 @@ Gen 1 complete.  20 generations in total.
 \addcontentsline{toc}{chapter}{Glossary}
 % ==========================================================================
 
-\begin{description}[style=nextline, leftmargin=2.8cm, itemsep=2pt]
+\begin{description}[style=nextline, leftmargin=3cm, itemsep=2pt]
 
 \item[Chromosome] A candidate solution in a GA.  Here: a system prompt string,
   stored as an \fn{Individual} object.
 
+\item[Convergence detection] Stopping the GA early when the population is
+  statistically homogeneous: $CV = \sigma/\mu < 0.01$ for 3 consecutive generations
+  and $\mu > 0.01$.  Prevents wasting API budget on a converged population.
+
+\item[CROSSOVER\_ONLY\_SLOTS] The first $N=2$ offspring bred per generation receive
+  crossover only (no mutation), providing stability without hard-locking elite
+  individuals.  The remaining 3 offspring per generation are mutation-eligible.
+
 \item[Crossover] Genetic operator combining two parents into one offspring.  Here:
-  an LLM semantically blends two parent prompts.  Fires with probability 0.8.
+  the Optimizer LLM semantically blends two parent prompts.  Fires with probability 0.8.
 
-\item[Elitism] Copying the top $k$ individuals unchanged into the next generation
-  (\fn{ELITISM\_COUNT=2}).  Prevents the best solution from ever being lost.
+\item[CV (coefficient of variation)] $\sigma / \mu$ of fitness across the population.
+  Used by convergence detection.
 
-\item[Evolution pool] The fixed 100 APPS problems used as the fitness benchmark.
-  Chosen by deterministic shuffle with seed 42.
+\item[Early stopping (test loop)] In \fn{run\_tests\_verbose()}: halting the test loop
+  after \fn{EARLY\_STOP\_FAILURES=3} consecutive failures.  The score denominator is
+  still the total test count, so skipped tests count as failures.
 
-\item[Exponential backoff] Waiting 5s, 10s, 20s between retries on rate-limit errors
-  (\fn{wait = 2**attempt * 5} in \fn{\_call()}).
+\item[Elitism] Copying the top $k$ individuals unchanged into the next generation.
+  \fn{ELITISM\_COUNT=0} in the current version --- no frozen elites.
 
-\item[Fitness] Mean partial-credit score across 100 problems.  Range: [0.0, 1.0].
+\item[Evolution pool] The fixed 65 Codeforces problems used as the fitness benchmark.
+  Chosen by stratified shuffle with seed 42 (5 harder problems always included).
+
+\item[Failure examples] Up to 5 problem failures stored on each \fn{Individual}
+  (\fn{individual.failure\_examples}).  Passed to \fn{mutate\_inject()} so the
+  Optimizer crafts strategies that address real weaknesses.
+
+\item[Fitness] Mean partial-credit score across 65 problems.  Range: [0.0, 1.0].
   Computed by \fn{ga.compute\_fitness()}.
 
-\item[\fn{fn\_name}] The Python function name the LLM must write, from each problem's
-  \fn{input\_output.json}.
+\item[Genealogy] The ancestry chain from the best evolved prompt back to its seed.
+  Traced by \fn{genealogy.py} after a run completes.
 
-\item[Generational replacement] The entire population is replaced each generation
-  (except elites), creating strong selection pressure.
+\item[Gemini Flash] \fn{gemini-2.5-flash} --- the Target model used for code
+  generation (fitness evaluation).  Fast, cheap.
+
+\item[Gemini Pro] \fn{gemini-2.5-pro} --- the Optimizer model used for crossover
+  and mutation meta-prompts.  More capable, used for creative prompt manipulation.
 
 \item[Held-out set] 200 problems never seen during evolution.  Used to test
   generalisation of the final evolved prompt.
 
 \item[Individual] One GA population member: a prompt with fitness, uid, parent uids,
-  and operator history.
+  operator history, intermediate steps, and failure examples.
 
-\item[Lazy init] \fn{\_get\_client()} only creates the \fn{anthropic.Anthropic} object
-  on first use, not at module import time.
+\item[Intermediate steps] Per-problem scores stored in \fn{individual.intermediate\_steps}
+  as a dict mapping problem index to score.  Used for analysis and checkpoint saves.
 
 \item[Meta-prompt] A prompt sent to the Optimizer LLM instructing it to modify another
   prompt (used in crossover and all three mutation operators).
 
 \item[Mutation] Modifying a single chromosome.  Three independent types: inject (25\%),
-  delete (15\%), rephrase (10\%).
+  delete (15\%), rephrase (10\%).  Only applies to offspring beyond CROSSOVER\_ONLY\_SLOTS.
+
+\item[PARALLEL\_EVALS] Number of problems evaluated simultaneously per individual
+  (\fn{PARALLEL\_EVALS=5}, using a \fn{ThreadPoolExecutor}).
 
 \item[Partial credit] Score = (tests passed) / (total tests).  Provides a smooth
   gradient vs.\ binary pass/fail.
 
-\item[Sentinel] The \fn{\_\_R\_\_:} prefix tags test results in subprocess stdout,
-  separating them from any stray \fn{print()} calls in generated code.
+\item[Process group] A set of processes sharing a PGID.  \fn{evaluator.py} creates
+  new process groups via \fn{preexec\_fn=os.setsid} and kills them with
+  \fn{os.killpg(pgid, SIGKILL)} to prevent orphaned children after timeouts.
+
+\item[Resume] The \fn{--resume} CLI flag re-loads the latest \fn{generation\_NN.json}
+  checkpoint and continues the GA from the next generation, replaying cost totals from
+  \fn{calls.jsonl}.
+
+\item[RNG state] The internal state of Python's MT19937 Mersenne Twister random number
+  generator.  Serialised to JSON via \fn{rng\_state\_to\_dict()} and saved in every
+  \fn{generation\_NN.json} checkpoint, enabling exact reproduction of resumed runs.
+
+\item[Service account] A GCP JSON credential file (\fn{service-account.json}) used to
+  authenticate Vertex AI API calls.  No interactive login or API key required.
 
 \item[Singleton] The \fn{tracker = CostTracker()} instance at module level is shared
   by all importers (\pyf{llm.py} and \pyf{main.py}).
 
+\item[Startup jitter] A random 0--2 s sleep at the start of each
+  \fn{\_eval\_code\_for\_problem()} call to stagger parallel API launches.
+
+\item[Stratified split] Sampling a fixed count from each difficulty tier (rating) when
+  building the evolution pool, ensuring representation of all difficulty levels.
+
 \item[System prompt] English instructions sent before the user message, shaping LLM
   behaviour.  The GA chromosome.
 
-\item[Temperature] LLM randomness parameter.  0.0 = deterministic (target model);
-  0.7 = creative (optimizer model).
+\item[Temperature] LLM randomness parameter.  Now enforced via
+  \fn{GenerateContentConfig(temperature=...)}: 0.0 for Flash (deterministic code gen),
+  0.7 for Pro (creative operator mutations).
+
+\item[Thinking tokens] Internal chain-of-thought tokens produced by Gemini 2.5 models
+  before the visible response.  Billed at the output token rate.  Tracked via
+  \fn{usage\_metadata.thoughts\_token\_count}.  Budget: 512 for Flash, 2048 for Pro.
 
 \item[Tournament selection] Sample $k=3$ individuals at random; return the fittest.
-  Balances exploitation with exploration.
+  Balances exploitation (picking the best) with exploration (not always the global best).
 
-\item[Two-model architecture] Haiku 4.5 (cheap, deterministic) is optimised;
-  Sonnet 4.6 (capable, creative) performs the genetic operators.
+\item[Two-model architecture] Gemini 2.5 Flash (code generation, target) is optimised;
+  Gemini 2.5 Pro (reasoning, creative) performs the genetic operators.
+
+\item[Vertex AI] Google Cloud's managed ML platform.  The project uses it to call
+  Gemini models via the \fn{google-genai} Python SDK with service account auth.
 
 \end{description}
 

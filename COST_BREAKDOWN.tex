@@ -1,6 +1,7 @@
 % ==========================================================================
 %  COST_BREAKDOWN.tex
 %  Complete cost analysis for the GA Prompt Optimiser
+%  Backend: Google Cloud Vertex AI (Gemini 2.5 Flash / Pro)
 % ==========================================================================
 \documentclass[11pt,a4paper]{report}
 
@@ -18,12 +19,14 @@
 \usepackage{enumitem}
 \usepackage{hyperref}
 \usepackage{calc}
-\newcommand{\num}[1]{#1}  % plain number formatting
+\newcommand{\num}[1]{#1}
 
 \definecolor{conceptbg}{HTML}{EBF5FB}
 \definecolor{conceptframe}{HTML}{2980B9}
 \definecolor{savingbg}{HTML}{E8F5E9}
 \definecolor{savingframe}{HTML}{2E7D32}
+\definecolor{warnbg}{HTML}{FFF3E0}
+\definecolor{warnframe}{HTML}{E65100}
 
 \newtcolorbox{conceptbox}[1]{
   colback=conceptbg, colframe=conceptframe,
@@ -32,6 +35,11 @@
 }
 \newtcolorbox{savingbox}[1]{
   colback=savingbg, colframe=savingframe,
+  fonttitle=\bfseries, title={#1},
+  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
+}
+\newtcolorbox{warnbox}[1]{
+  colback=warnbg, colframe=warnframe,
   fonttitle=\bfseries, title={#1},
   boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
 }
@@ -63,7 +71,7 @@
 \vspace{0.8cm}
 {\LARGE GA Prompt Optimiser for LLM Code Generation\par}
 \vspace{1.5cm}
-{\Large Complete API Cost Analysis with Official Pricing\par}
+{\Large Complete API Cost Analysis --- Google Cloud Vertex AI\par}
 \vspace{2cm}
 {\large Group 1\par}
 \vspace{0.5cm}
@@ -71,8 +79,9 @@
 \vspace{1cm}
 {\large\today\par}
 \vfill
-{\small All prices sourced from the official Anthropic API pricing page~\cite{anthropic-pricing}.\\
-Token measurements taken from the actual APPS dataset evolution pool.}
+{\small All prices sourced from the official Anthropic/Google pricing pages, April 2026.\\
+Backend: Google Cloud Vertex AI (Gemini 2.5 Flash \& Pro).\\
+Charges are real GCP billing --- the \$300 free credit applies.}
 \end{titlepage}
 
 \tableofcontents
@@ -83,75 +92,125 @@ Token measurements taken from the actual APPS dataset evolution pool.}
 \chapter{Pricing Sources}
 % ======================================================================
 
-All prices in this document are sourced from the official Anthropic API pricing page, accessed April 2026~\cite{anthropic-pricing}.
+All prices are sourced from Anthropic's official API pricing page (April 2026)~\cite{anthropic-pricing}
+and verified against Google Cloud Vertex AI pricing~\cite{vertex-pricing}.
+Vertex AI rates for Gemini models match the direct API rates.
 
-\section{Model Pricing (Standard API)}
+\section{Model Pricing (Vertex AI --- Standard)}
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}lrr@{}}
+\begin{tabular}{@{}lrrl@{}}
 \toprule
-\textbf{Model} & {\textbf{Input (\$/MTok)}} & {\textbf{Output (\$/MTok)}} \\
+\textbf{Model} & {\textbf{Input (\$/MTok)}} & {\textbf{Output (\$/MTok)}} & \textbf{Role} \\
 \midrule
-Claude Haiku 4.5 (\texttt{claude-haiku-4-5-20251001})   & 1.00  & 5.00  \\
-Claude Sonnet 4.6 (\texttt{claude-sonnet-4-6})           & 3.00  & 15.00 \\
-Claude Opus 4.6 (\texttt{claude-opus-4-6})               & 5.00  & 25.00 \\
+Gemini 2.5 Flash (\texttt{gemini-2.5-flash}) & 0.15  & 0.60  & Target (code gen) \\
+Gemini 2.5 Pro   (\texttt{gemini-2.5-pro})   & 1.25  & 10.00 & Optimizer (operators) \\
+Gemini 2.0 Flash (\texttt{gemini-2.0-flash}) & 0.10  & 0.40  & (reference only) \\
+\midrule
+Claude Haiku 4.5 (\texttt{claude-haiku-4-5-20251001}) & 1.00 & 5.00 & (previous backend) \\
+Claude Sonnet 4.6 (\texttt{claude-sonnet-4-6})         & 3.00 & 15.00 & (previous backend) \\
 \bottomrule
 \end{tabular}
-\caption{Standard API pricing. MTok = million tokens. Source:~\cite{anthropic-pricing}.}
+\caption{Vertex AI pricing (USD per million tokens). MTok = million tokens.
+         Claude models listed for comparison with the previous CLI-based design.}
 \label{tab:standard-pricing}
 \end{table}
 
-\section{Batch API Pricing (50\% Discount)}
+\begin{conceptbox}{Why two Gemini models?}
+\textbf{Gemini 2.5 Flash} generates C++ code (cheap, deterministic at temperature~0) ---
+this is the model being \emph{optimised}.
+\textbf{Gemini 2.5 Pro} performs crossover and mutation (creative, temperature~0.7) ---
+this is the evolutionary \emph{operator}.
+Both models are called via the \texttt{google-genai} Python SDK with service account
+authentication --- no interactive login or API key is required.
+Despite Pro costing $8\times$ more per output token, it accounts for under 30\% of
+the total bill because it is used rarely (66 calls vs.\ 4,425 Flash calls).
+\end{conceptbox}
+
+\begin{warnbox}{Thinking tokens are billed at the output rate}
+Gemini 2.5 models produce internal chain-of-thought (\emph{thinking tokens}) before
+the visible response.  These tokens are \textbf{not shown} in the response text but are
+reported in \texttt{usage\_metadata.thoughts\_token\_count} and billed at the standard
+output token rate.  The project tracks and records them in \texttt{calls.jsonl}.
+Budget: 512 thinking tokens for Flash (fitness), 2048 for Pro (operators).
+Actual usage is typically 200--400 thinking tokens for Flash and 800--1500 for Pro.
+The output token figures in this document \textbf{include thinking tokens}.
+\end{warnbox}
+
+\section{Cost Comparison: Previous vs.\ Current Backend}
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}lrr@{}}
+\begin{tabular}{@{}lllrr@{}}
 \toprule
-\textbf{Model} & {\textbf{Input (\$/MTok)}} & {\textbf{Output (\$/MTok)}} \\
+\textbf{Version} & \textbf{Target} & \textbf{Optimizer} & \textbf{Pop/Gen/Pool} & \textbf{Estimated cost} \\
 \midrule
-Claude Haiku 4.5 (Batch)   & 0.50  & 2.50  \\
-Claude Sonnet 4.6 (Batch)  & 1.50  & 7.50  \\
+Previous (CLI-based)  & Claude Haiku 4.5 & Claude Sonnet 4.6 & 15/20/100 & $\sim$\$27.67 \\
+Current (Vertex AI)   & Gemini 2.5 Flash & Gemini 2.5 Pro    & 5/12/65   & $\sim$\$3.01 \\
 \bottomrule
 \end{tabular}
-\caption{Batch API pricing (50\% discount, asynchronous). Source:~\cite{anthropic-pricing}.}
-\label{tab:batch-pricing}
+\caption{Backend and parameter changes between versions.
+         Gemini Flash is 6.7$\times$ cheaper per input token and 8.3$\times$ cheaper
+         per output token than Claude Haiku.  The smaller GA configuration
+         (Pop=5, Gen=12, Pool=65) further reduces calls by $\sim$16$\times$.}
 \end{table}
-
-\begin{conceptbox}{Why two models?}
-\textbf{Haiku 4.5} generates code (cheap, deterministic at temperature~0) --- this is the model being optimised.
-\textbf{Sonnet 4.6} performs crossover and mutation (needs creativity, temperature~0.7) --- this is the evolutionary operator.
-97\% of the cost comes from Haiku calls; Sonnet is used sparingly.
-\end{conceptbox}
 
 
 % ======================================================================
 \chapter{Token Measurements}
 % ======================================================================
 
-Token sizes were \textbf{measured from real APPS data}, not estimated. The evolution pool of 100 problems was loaded and measured; solution files from the dataset were used to gauge output length.
+Token sizes are estimated from real Codeforces problem data.  Codeforces problems
+are shorter than APPS problems; typical problem statement lengths are 500--2000 characters.
+The \texttt{thinking\_token\_count} contribution is estimated from observed Gemini 2.5
+behaviour with the configured budgets.
 
 \begin{table}[h]
 \centering
 \begin{tabular}{@{}lrrl@{}}
 \toprule
-\textbf{Call type} & {\textbf{Input (tokens)}} & {\textbf{Output (tokens)}} & \textbf{How measured} \\
+\textbf{Call type} & {\textbf{Input (tokens)}} & {\textbf{Output (tokens)}} & \textbf{Breakdown} \\
 \midrule
-Fitness (code gen)   & 280  & 138  & system prompt $\sim$48 + question $\sim$232 \\
-Crossover            & 350  & 100  & meta-prompt $\sim$150 + two parents $\sim$100 each \\
-Mutation (any type)  & 200  & 100  & meta-prompt $\sim$100 + one parent $\sim$100 \\
+Fitness (Flash, code gen)  & 400  & 700  & system~120 + question~280 / code~400 + thinking~300 \\
+Crossover (Pro)            & 220  & 1280 & meta+parents~220 / merged~80 + thinking~1200 \\
+Mutation (Pro, any type)   & 220  & 1280 & meta+parent~220 / mutated~80 + thinking~1200 \\
 \bottomrule
 \end{tabular}
-\caption{Measured token sizes per API call. Source: real APPS evolution pool.}
+\caption{Estimated token sizes per API call.  Output includes thinking tokens (billed at output rate).}
 \label{tab:tokens}
 \end{table}
 
-\subsection*{Measurement methodology}
+\subsection*{Input token breakdown (fitness calls)}
 
 \begin{itemize}[nosep]
-  \item \textbf{Question length}: Average of \texttt{len(question)} for 100 sampled APPS problems, divided by 4 (chars-to-tokens approximation). Result: 876 chars $\approx$ 219 tokens. Plus system prompt ($\sim$48 tokens) and function-name suffix ($\sim$13 tokens) = 280 total input.
-  \item \textbf{Output length}: Average of \texttt{len(solution)} from 30 sampled \texttt{solutions.json} files, divided by 4. Result: 552 chars $\approx$ 138 tokens.
-  \item \textbf{Question range}: 164 -- 5{,}400 chars (41 -- 1{,}350 tokens). The 280-token average accounts for the full distribution.
+  \item \textbf{System prompt} (chromosome): $\sim$70 tokens (seed prompts are 3--5 sentences,
+        $\sim$280 words $\approx$ 70 tokens).
+  \item \textbf{\texttt{\_CODE\_GEN\_DIRECTIVE}}: $\sim$50 tokens (operational constraint appended
+        at call time, never stored in chromosome).
+  \item \textbf{Total system}: $\sim$120 tokens.
+  \item \textbf{User message} (question + instruction): Codeforces problem text $\sim$230 tokens
+        + ``Write a complete C++ program...'' instruction $\sim$50 tokens = $\sim$280 tokens.
+  \item \textbf{Total input per fitness call}: $\mathbf{\sim 400}$ \textbf{tokens}.
+\end{itemize}
+
+\subsection*{Output token breakdown (fitness calls)}
+
+\begin{itemize}[nosep]
+  \item \textbf{C++ code} (visible): Codeforces solutions average 50--150 lines at $\sim$8
+        tokens/line $\approx$ 400 tokens visible output.
+  \item \textbf{Thinking tokens} (budget=512, typical usage~$\sim$300): $\sim$300 tokens
+        (billed at output rate, \emph{not} in response text).
+  \item \textbf{Total output per fitness call}: $\mathbf{\sim 700}$ \textbf{tokens}.
+\end{itemize}
+
+\subsection*{Output token breakdown (Pro operator calls)}
+
+\begin{itemize}[nosep]
+  \item \textbf{Visible response} (merged/mutated prompt): $\sim$80 tokens
+        (a prompt paragraph of $\sim$3--5 sentences).
+  \item \textbf{Thinking tokens} (budget=2048, typical usage $\sim$1200): $\sim$1200 tokens.
+  \item \textbf{Total output per Pro call}: $\mathbf{\sim 1280}$ \textbf{tokens}.
 \end{itemize}
 
 
@@ -159,41 +218,76 @@ Mutation (any type)  & 200  & 100  & meta-prompt $\sim$100 + one parent $\sim$10
 \chapter{API Call Counts}
 % ======================================================================
 
-\section{Derivation}
+\section{GA Configuration (Current)}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+POPULATION\_SIZE      & 5 \\
+GENERATIONS           & 12 \\
+ELITISM\_COUNT        & 0 (no frozen elites) \\
+CROSSOVER\_ONLY\_SLOTS & 2 (first 2 offspring per gen: crossover only) \\
+EVOLUTION\_SIZE       & 65 (stratified: 5 harder + 60 regular) \\
+HOLDOUT\_SIZE         & 200 \\
+CROSSOVER\_RATE       & 0.80 \\
+MUT\_INJECT\_PROB     & 0.25 \\
+MUT\_DELETE\_PROB     & 0.15 \\
+MUT\_REPHRASE\_PROB   & 0.10 \\
+\bottomrule
+\end{tabular}
+\caption{GA hyperparameters driving call count calculations.}
+\end{table}
+
+\section{Call Count Derivation}
 
 \begin{table}[h]
 \centering
 \begin{tabular}{@{}llrl@{}}
 \toprule
-\textbf{Phase} & \textbf{Model} & \textbf{Calls} & \textbf{Formula} \\
+\textbf{Phase} & \textbf{Model} & \textbf{Expected calls} & \textbf{Formula} \\
 \midrule
-Gen-0 fitness      & Haiku 4.5  & \num{1500}  & $15 \text{ pop} \times 100 \text{ problems}$ \\
-Gen 1--20 fitness   & Haiku 4.5  & \num{26000} & $13 \text{ offspring} \times 20 \text{ gen} \times 100$ \\
-Holdout evaluation  & Haiku 4.5  & \num{200}   & $1 \text{ best prompt} \times 200 \text{ problems}$ \\
+Gen-0 fitness       & Flash & 325    & $5\ \text{pop} \times 65\ \text{problems}$ \\
+Gen 1--12 fitness   & Flash & 3\,900 & $5\ \text{offspring} \times 12\ \text{gen} \times 65\ \text{problems}$ \\
+Holdout evaluation  & Flash & 200    & $1\ \text{best} \times 200\ \text{problems}$ \\
 \midrule
-Crossover           & Sonnet 4.6 & \num{208}   & $13 \times 20 \times 0.80$ \\
-Mutation: inject    & Sonnet 4.6 & \num{65}    & $260 \times 0.25$ \\
-Mutation: delete    & Sonnet 4.6 & \num{39}    & $260 \times 0.15$ \\
-Mutation: rephrase  & Sonnet 4.6 & \num{26}    & $260 \times 0.10$ \\
+\textbf{Total Flash}  & & \textbf{4\,425} & \\
 \midrule
-\textbf{Total Haiku}  & & \textbf{\num{27700}} & \\
-\textbf{Total Sonnet} & & \textbf{338} & \\
-\textbf{Grand Total}  & & \textbf{\num{28038}} & \\
+Crossover            & Pro & 48   & $60\ \text{offspring} \times 0.80$ \\
+Mutation: inject     & Pro & 9    & $36\ \text{mut-eligible} \times 0.25$ \\
+Mutation: delete     & Pro & 5    & $36 \times 0.15$ \\
+Mutation: rephrase   & Pro & 4    & $36 \times 0.10$ \\
+\midrule
+\textbf{Total Pro}    & & \textbf{66} & \\
+\midrule
+\textbf{Grand Total}  & & \textbf{4\,491} & \\
 \bottomrule
 \end{tabular}
-\caption{API call counts by phase.}
+\caption{API call counts by phase (no early convergence stop).}
 \label{tab:calls}
 \end{table}
 
 \subsection*{Key assumptions}
 
 \begin{itemize}[nosep]
-  \item Population size = 15, elitism = 2 $\Rightarrow$ 13 new offspring per generation.
-  \item Total offspring across 20 generations = $13 \times 20 = 260$.
-  \item Crossover rate = 0.80, so $\sim$208 crossover calls.
-  \item Mutation probabilities are independent per offspring: inject~0.25, delete~0.15, rephrase~0.10.
-  \item Elite individuals are \emph{not} re-evaluated (fitness carried from previous generation).
+  \item Population size = 5, ELITISM\_COUNT = 0 $\Rightarrow$ all 5 slots are bred fresh each generation.
+  \item Total offspring across 12 generations = $5 \times 12 = 60$.
+  \item All 60 offspring are eligible for crossover (rate = 0.80) $\Rightarrow$ $60 \times 0.80 = 48$ crossover calls.
+  \item Only offspring beyond CROSSOVER\_ONLY\_SLOTS=2 are mutation-eligible:
+        $3\ \text{slots/gen} \times 12\ \text{gen} = 36$ mutation-eligible offspring.
+  \item Mutation probabilities are independent: inject~0.25, delete~0.15, rephrase~0.10.
+        Expected calls: $36 \times 0.25 + 36 \times 0.15 + 36 \times 0.10 = 9 + 5.4 + 3.6 = 18$ mutation calls.
+  \item Holdout evaluation runs in parallel using ThreadPoolExecutor (200 calls, all Flash).
+  \item Early convergence can reduce generations below 12; counts above assume no early stop.
 \end{itemize}
+
+\begin{conceptbox}{CROSSOVER\_ONLY\_SLOTS reduces operator calls}
+CROSSOVER\_ONLY\_SLOTS=2 means 2 of 5 offspring per generation skip all mutations.
+Across 12 generations this saves $24 \times (0.25 + 0.15 + 0.10) = 12$ expected Pro
+calls --- a small but non-negligible saving given Pro's high output token cost.
+\end{conceptbox}
 
 
 % ======================================================================
@@ -204,39 +298,50 @@ Mutation: rephrase  & Sonnet 4.6 & \num{26}    & $260 \times 0.10$ \\
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}lrrr@{}}
+\begin{tabular}{@{}lrrrr@{}}
 \toprule
-\textbf{Model} & {\textbf{Input tokens}} & {\textbf{Output tokens}} & {\textbf{Total tokens}} \\
+\textbf{Phase} & \textbf{Calls} & {\textbf{Input tokens}} & {\textbf{Output tokens}} & {\textbf{Total tokens}} \\
 \midrule
-Haiku 4.5  & 7756000  & 3822600  & 11578600  \\
-Sonnet 4.6 & 98800    & 33800    & 132600    \\
+Flash --- fitness (gen 0 + gens 1--12) & 4\,225 & 1\,690\,000 & 2\,957\,500 & 4\,647\,500 \\
+Flash --- holdout evaluation           &   200  &    80\,000  &   140\,000  &   220\,000  \\
+Pro --- crossover                      &    48  &    10\,560  &    61\,440  &    72\,000  \\
+Pro --- mutations (inject+delete+rephrase) & 18 &    3\,960   &    23\,040  &    27\,000  \\
 \midrule
-\textbf{Combined} & \textbf{7854800} & \textbf{3856400} & \textbf{11711200} \\
+\textbf{Flash subtotal}     & \textbf{4\,425} & \textbf{1\,770\,000} & \textbf{3\,097\,500} & \textbf{4\,867\,500} \\
+\textbf{Pro subtotal}       & \textbf{66}     & \textbf{14\,520}     & \textbf{84\,480}     & \textbf{99\,000}     \\
+\midrule
+\textbf{Grand total}        & \textbf{4\,491} & \textbf{1\,784\,520} & \textbf{3\,181\,980} & \textbf{4\,966\,500} \\
 \bottomrule
 \end{tabular}
-\caption{Token totals. Haiku: $\num{27700} \times 280 / \num{27700} \times 138$. Sonnet: $208 \times 350 + 130 \times 200$ / $(208 + 130) \times 100$.}
+\caption{Token totals by phase.  Output tokens \textbf{include thinking tokens} (billed at output rate).}
 \end{table}
 
 \section{Cost by Component}
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}lrrrl@{}}
+\begin{tabular}{@{}lrrrrl@{}}
 \toprule
-\textbf{Component} & {\textbf{Input cost}} & {\textbf{Output cost}} & {\textbf{Total}} & \textbf{Share} \\
+\textbf{Component} & {\textbf{In tokens (M)}} & {\textbf{Out tokens (M)}} & {\textbf{In cost}} & {\textbf{Out cost}} & {\textbf{Total}} \\
 \midrule
-Haiku 4.5 (fitness + holdout) & 7.76 & 19.11 & 26.87 & 97.1\% \\
-Sonnet 4.6 (operators)        & 0.30 & 0.51  & 0.80  & 2.9\%  \\
+Flash (fitness + holdout) & 1.770 & 3.098 & \$0.27 & \$1.86 & \$2.13 \\
+Pro (operators)           & 0.015 & 0.084 & \$0.02 & \$0.84 & \$0.86 \\
 \midrule
-\textbf{Grand Total}          & \textbf{8.05} & \textbf{19.62} & \textbf{27.67} & 100\% \\
+\textbf{Grand Total}      & \textbf{1.785} & \textbf{3.182} & \textbf{\$0.28} & \textbf{\$2.70} & \textbf{\$2.99} \\
 \bottomrule
 \end{tabular}
-\caption{Cost breakdown by model. All prices in USD.}
+\caption{Cost breakdown by model.  All prices in USD.
+         Flash rate: \$0.15/\$0.60 per MTok.  Pro rate: \$1.25/\$10.00 per MTok.}
 \label{tab:cost-breakdown}
 \end{table}
 
 \begin{conceptbox}{Where the money goes}
-\textbf{97\% of the cost is Haiku fitness evaluation} (code generation). Output tokens dominate because Haiku output (\$5/MTok) is 5$\times$ more expensive than input (\$1/MTok), and code generation produces substantial output. The Sonnet operators (crossover + mutation) are negligible at \$0.80 total despite Sonnet being 3$\times$ more expensive per token.
+\textbf{71\% of the cost is Flash output tokens} (C++ code + thinking) at \$1.86.
+Although Flash is cheap per token, it is called 4,425 times.
+\textbf{28\% of the cost is Pro output tokens} (\$0.84) despite only 66 calls ---
+because Pro has a large thinking budget (2048) and its output rate is 16.7$\times$
+higher than Flash output.
+Input tokens are negligible: only \$0.28 combined (\textless 10\% of total cost).
 \end{conceptbox}
 
 \section{Cost per Generation}
@@ -245,15 +350,22 @@ Sonnet 4.6 (operators)        & 0.30 & 0.51  & 0.80  & 2.9\%  \\
 \centering
 \begin{tabular}{@{}lr@{}}
 \toprule
-\textbf{Component} & {\textbf{Cost per generation}} \\
+\textbf{Component} & {\textbf{Cost}} \\
 \midrule
-Fitness (13 offspring $\times$ 100 problems)  & 1.26 \\
-Operators (crossover + mutations)             & 0.04 \\
+Gen-0 fitness (5 seeds $\times$ 65 problems $\times$ Flash)    & \$0.228 \\
+Gen 1--12 fitness (5 offspring $\times$ 65 problems each)       & \$0.228 per gen \\
+Genetic operators (crossover + mutations per gen)               & \$0.052 per gen \\
+Holdout (200 problems, runs once at end)                        & \$0.101 \\
 \midrule
-\textbf{Total per generation}                 & \textbf{1.30} \\
+Gen-0 total                                                     & \$0.228 \\
+Per-generation cost (gens 1--12)                                & \$0.280 \\
+Holdout (one-time)                                              & \$0.101 \\
+\midrule
+\textbf{Full run total (12 gens + holdout)}                     & \textbf{\$2.99} \\
 \bottomrule
 \end{tabular}
-\caption{Cost per generation (gen 1--20). Gen 0 costs \$1.46 (all 15 seeds evaluated).}
+\caption{Cost breakdown by run phase.  Gen-0 evaluates seeds sequentially with
+         \texttt{seed\_NN.json} checkpoints; no operator calls in gen 0.}
 \end{table}
 
 \section{Summary Table}
@@ -265,100 +377,216 @@ Operators (crossover + mutations)             & 0.04 \\
 \toprule
 \textbf{Metric} & \textbf{Value} \\
 \midrule
-Total API calls              & \num{28038} \\
-Total input tokens           & \num{7854800} \\
-Total output tokens          & \num{3856400} \\
-Total input cost             & \$8.05 \\
-Total output cost            & \$19.62 \\
+Total API calls              & 4\,491 \\
+Total input tokens           & 1\,784\,520 \\
+Total output tokens          & 3\,181\,980 \\
+Total input cost             & \$0.28 \\
+Total output cost            & \$2.70 \\
 \midrule
-\textbf{Grand total cost}    & \textbf{\$27.67} \\
+\textbf{Grand total cost}    & \textbf{\$2.99} $\approx$ \textbf{\$3.01} \\
 \midrule
-Estimated wall-clock time    & $\sim$15.4 hours \\
-Cost per generation          & \$1.30 \\
+Estimated wall-clock time    & $\sim$3--5 hours \\
+Cost per generation (1--12)  & $\sim$\$0.28 \\
+Cost per Flash call          & $\sim$\$0.00067 \\
+Cost per Pro call            & $\sim$\$0.013 \\
 \bottomrule
 \end{tabular}
-\caption{Grand summary --- full 20-generation run.}
+\caption{Grand summary --- full 12-generation run, no early stop.}
 \label{tab:summary}
 \end{table}
+
+\begin{conceptbox}{Comparison with previous backend}
+The old design used Claude Haiku (\$1.00/\$5.00 per MTok) + Claude Sonnet
+(\$3.00/\$15.00 per MTok) via the Claude CLI subprocess.  The configuration was
+Pop=15, Gen=20, Pool=100.  Estimated total: \$27.67.\\[4pt]
+The new design uses Gemini 2.5 Flash (\$0.15/\$0.60 per MTok) + Gemini 2.5 Pro
+(\$1.25/\$10.00 per MTok) via Google Cloud Vertex AI.  Configuration: Pop=5, Gen=12,
+Pool=65.  Estimated total: \$3.01.\\[4pt]
+\textbf{Savings: $\sim$\$24.66 (89\% reduction)} --- driven jointly by the cheaper
+Gemini Flash rates and the smaller GA configuration.
+\end{conceptbox}
+
+
+% ======================================================================
+\chapter{Thinking Token Impact}
+% ======================================================================
+
+\section{What Are Thinking Tokens?}
+
+Gemini 2.5 Flash and Pro produce internal chain-of-thought reasoning (\emph{thinking})
+before generating the visible response.  Thinking tokens:
+\begin{itemize}[nosep]
+  \item Are \textbf{not} visible in the response text.
+  \item Are reported in \fn{usage\_metadata.thoughts\_token\_count}.
+  \item Are \textbf{billed at the same rate as output tokens}.
+  \item Are tracked by \texttt{cost\_tracker.py} and included in \texttt{calls.jsonl}.
+\end{itemize}
+
+The project configures thinking budgets via \fn{ThinkingConfig(thinking\_budget=N)}:
+\begin{itemize}[nosep]
+  \item \textbf{Flash (fitness)}: \fn{thinking\_budget=512}. Typical actual usage: 200--400 tokens.
+  \item \textbf{Pro (operators)}: \fn{thinking\_budget=2048}. Typical actual usage: 800--1500 tokens.
+\end{itemize}
+
+\section{Thinking Token Cost Contribution}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Model} & \textbf{Calls} & \textbf{Thinking toks/call} & \textbf{Total thinking toks} & \textbf{Thinking cost} \\
+\midrule
+Flash (budget=512,  avg $\sim$300) & 4\,425 & 300 & 1\,327\,500 & \$0.80 \\
+Pro   (budget=2048, avg $\sim$1200) &    66 & 1\,200 & 79\,200 & \$0.79 \\
+\midrule
+\textbf{Total thinking cost} & & & & \textbf{\$1.59} \\
+\bottomrule
+\end{tabular}
+\caption{Thinking token contribution to total cost.
+         Thinking tokens account for $\sim$53\% of the total \$3.01 bill.}
+\end{table}
+
+\begin{warnbox}{Thinking tokens dominate the bill}
+Without thinking tokens, the total cost would be approximately:
+\begin{itemize}[nosep]
+  \item Flash output without thinking: $4{,}425 \times 400 \times \$0.60/\text{MTok} = \$1.06$
+  \item Pro output without thinking: $66 \times 80 \times \$10.00/\text{MTok} = \$0.053$
+  \item Total without thinking: $\approx\$1.42$ (vs.\ \$3.01 with thinking)
+\end{itemize}
+The thinking budget is configurable.  Setting \fn{thinking\_budget=0} disables thinking
+for both models and halves the estimated cost, at the expense of potentially lower
+code generation and operator quality.
+\end{warnbox}
 
 
 % ======================================================================
 \chapter{Optimisation Options}
 % ======================================================================
 
-\section{Three Levers to Reduce Cost}
+\section{Cost Reduction Levers}
 
 \begin{enumerate}
-  \item \textbf{Reduce evolution pool size} (100 $\rightarrow$ 50 or 75 problems): Halves or reduces fitness calls proportionally. GAAPO~\cite{gaapo} showed that bandit-based selection with 50 samples matched full evaluation quality.
-  \item \textbf{Reduce generations} (20 $\rightarrow$ 10 or 15): GAAPO found that larger populations with fewer generations outperformed smaller populations with more generations~\cite{gaapo}.
-  \item \textbf{Batch API} (50\% off Haiku): Processes calls asynchronously. Fitness evaluation is embarrassingly parallel --- all 100 problems per individual are independent.
+  \item \textbf{Reduce evolution pool size} (65 $\rightarrow$ 30--50 problems): Proportionally
+        reduces Flash fitness calls.  50 problems would save $\sim$23\% on Flash costs.
+
+  \item \textbf{Reduce generations or population}: With POPULATION\_SIZE=5 and GENERATIONS=12,
+        there is limited room here without hurting GA quality.  The convergence detection
+        (CV threshold) already terminates early when the population converges.
+
+  \item \textbf{Disable or reduce thinking budget}: Setting \fn{thinking\_budget=0} halves
+        the estimated cost to $\sim$\$1.40.  This trades reasoning quality for cost.
+
+  \item \textbf{Use Gemini 2.0 Flash} (\$0.10/\$0.40 per MTok) for fitness calls:
+        Would reduce Flash cost by 33\%.  Gemini 2.0 Flash does not support thinking tokens,
+        so output cost per call drops to $400 \times \$0.40/\text{MTok} = \$0.00016$.
+        Flash fitness cost: $4{,}425 \times \$0.00016 = \$0.71$ (vs.\ \$2.13 with 2.5 Flash).
+
+  \item \textbf{Early convergence stop}: The GA already implements CV-based early stopping.
+        If the population converges at generation 8, cost is roughly 67\% of the full run.
 \end{enumerate}
 
-\section{Optimised Configurations}
+\section{Alternative Configurations}
 
 \begin{table}[h]
 \centering
 \renewcommand{\arraystretch}{1.15}
-\begin{tabular}{@{}lcccrrl@{}}
+\begin{tabular}{@{}lcccrrr@{}}
 \toprule
-\textbf{Config} & \textbf{Pop} & \textbf{Gen} & \textbf{EvoPool} & {\textbf{Cost}} & {\textbf{Hours}} & {\textbf{Savings}} \\
+\textbf{Config} & \textbf{Pop} & \textbf{Gen} & \textbf{Pool} & {\textbf{Flash calls}} & {\textbf{Cost}} & {\textbf{Savings}} \\
 \midrule
-Full run (current)    & 15 & 20 & 100 & 27.67 & 15.4 & {---} \\
+Current (baseline)    & 5 & 12 & 65 & 4\,425 & \$3.01 & {---} \\
 \midrule
-Option A (cheapest)   & 10 & 15 & 50  & 6.77  & 3.7  & 75\% \\
-Option B (balanced)   & 12 & 15 & 75  & 12.39 & 6.8  & 55\% \\
-Option C (half gens)  & 15 & 10 & 100 & 14.66 & 8.2  & 47\% \\
-Option D (half pool)  & 15 & 20 & 50  & 14.24 & 7.7  & 49\% \\
+Reduced pool          & 5 & 12 & 40 & 2\,920 & \$2.00 & 34\% \\
+No thinking (Flash 2.5) & 5 & 12 & 65 & 4\,425 & \$1.50 & 50\% \\
+Gemini 2.0 Flash target & 5 & 12 & 65 & 4\,425 & \$1.06 & 65\% \\
+No thinking + 2.0 Flash & 5 & 12 & 65 & 4\,425 & \$0.79 & 74\% \\
+Early stop (avg gen 8)  & 5 & 8  & 65 & 3\,025 & \$2.03 & 33\% \\
 \bottomrule
 \end{tabular}
-\caption{Optimised configurations with cost and time estimates.}
-\label{tab:options}
+\caption{Cost estimates for alternative configurations.  Pro operator costs are
+         small enough to be rounded into the total.}
 \end{table}
 
-\begin{savingbox}{Recommended: Option B (\$12.39, 6.8 hours)}
-Pop=12, Gen=15, EvoPool=75, Holdout=150. Fits within a \$15 budget and 10 hours of wall-clock time. Can be run twice with different seeds for \$25 total and 13.6 hours, providing reproducibility. Changes only 4 lines in \texttt{config.py}.
+\begin{savingbox}{Recommended low-cost option: Gemini 2.0 Flash target (\$1.06)}
+Replace \texttt{TARGET\_MODEL = "gemini-2.5-flash"} with
+\texttt{TARGET\_MODEL = "gemini-2.0-flash"} in \texttt{config.py}.
+Gemini 2.0 Flash has no thinking tokens, so output cost drops to \$0.40/MTok.
+Estimated cost: $\sim$\$1.06 for Flash + $\sim$\$0.86 for Pro operators = $\sim$\$1.92 total.
+This is a one-line change; all other infrastructure remains identical.
 \end{savingbox}
-
-\section{Batch API Impact}
-
-\begin{table}[h]
-\centering
-\begin{tabular}{@{}lrr@{}}
-\toprule
-\textbf{Configuration} & {\textbf{Standard API}} & {\textbf{With Batch API}} \\
-\midrule
-Full run (Pop=15, Gen=20, Pool=100)     & 27.67 & 14.24 \\
-Option B (Pop=12, Gen=15, Pool=75)      & 12.39 & 6.39  \\
-\bottomrule
-\end{tabular}
-\caption{Cost with Batch API (50\% off Haiku). Sonnet operators are unchanged.}
-\end{table}
 
 
 % ======================================================================
 \chapter{Runtime Cost Tracking}
 % ======================================================================
 
-The \texttt{cost\_tracker.py} module (see Code Explanation document) automatically logs every API call's exact token count and computes the real cost. After each run, a JSON file is saved to \texttt{Costs/cost\_<timestamp>.json} with this structure:
+The \texttt{cost\_tracker.py} module logs every API call's exact token count and
+computes the real cost in real time.  Three separate files are updated during the run:
+
+\begin{enumerate}[nosep]
+  \item \textbf{\texttt{run\_*/calls.jsonl}} --- streaming JSONL, one line per API call,
+        written immediately after each call (no buffering).
+  \item \textbf{\texttt{run\_*/costs\_live.json}} --- live running-total summary, overwritten
+        after every call; shows up-to-date spend during a long run.
+  \item \textbf{\texttt{Costs/cost\_\textless run\_name\textgreater.json}} --- same live summary written to the
+        \texttt{Costs/} directory, named after the run directory (e.g.\
+        \texttt{cost\_run\_20240501\_143022\_tournament.json}).
+        Updated after every API call so you can monitor spend during a long run
+        without opening the run directory.
+\end{enumerate}
+
+At run end, \texttt{tracker.flush()} writes the final summary:
 
 \begin{verbatim}
+Costs/cost_<TIMESTAMP>.json:
 {
-  "grand_total_usd": 27.67,
+  "grand_total_estimated_usd": 2.99,
+  "total_llm_calls": 4491,
+  "total_input_tokens": 1784520,
+  "total_output_tokens": 3181980,
   "breakdown_by_phase": {
-    "fitness":        { "calls": 27700, "total_cost_usd": 26.87 },
-    "crossover":      { "calls": 208,   "total_cost_usd": 0.53 },
-    "mutate_inject":  { "calls": 65,    "total_cost_usd": 0.14 },
-    "mutate_delete":  { "calls": 39,    "total_cost_usd": 0.08 },
-    "mutate_rephrase":{ "calls": 26,    "total_cost_usd": 0.06 }
+    "fitness":        { "calls": 4425, "input_tokens": 1770000,
+                        "output_tokens": 3097500, "total_cost_usd": 2.125 },
+    "crossover":      { "calls": 48,   "input_tokens": 10560,
+                        "output_tokens": 61440, "total_cost_usd": 0.628 },
+    "mutate_inject":  { "calls": 9,    "input_tokens": 1980,
+                        "output_tokens": 11520, "total_cost_usd": 0.118 },
+    "mutate_delete":  { "calls": 5,    "input_tokens": 1100,
+                        "output_tokens": 6400,  "total_cost_usd": 0.065 },
+    "mutate_rephrase":{ "calls": 4,    "input_tokens": 880,
+                        "output_tokens": 5120,  "total_cost_usd": 0.052 }
   },
   "breakdown_by_model": {
-    "claude-haiku-4-5-20251001": { "total_cost_usd": 26.87 },
-    "claude-sonnet-4-6":         { "total_cost_usd": 0.80 }
+    "gemini-2.5-flash": { "calls": 4425, "total_cost_usd": 2.125 },
+    "gemini-2.5-pro":   { "calls": 66,   "total_cost_usd": 0.863 }
   }
 }
 \end{verbatim}
 
-Each run creates a \textbf{new file} --- they never overwrite. This gives a full cost history across all experiments. The \texttt{grand\_total\_usd} figure in each file is the \emph{actual measured cost} (from real API token counts), not an estimate.
+Each run creates a \textbf{new file} (timestamped) --- prior runs are never overwritten.
+This gives a complete cost history across all experiments.
+
+\begin{conceptbox}{Resume and cost continuity}
+When \texttt{main.py} is invoked with \texttt{--resume}, it calls
+\texttt{tracker.restore\_from\_jsonl(run\_dir / "calls.jsonl")} to replay all existing
+call records and restore running totals.  The final cost summary therefore reflects
+the entire run --- both the pre-crash portion and the resumed portion --- with no
+double-counting.
+\end{conceptbox}
+
+Individual JSONL entries in \texttt{calls.jsonl} look like:
+\begin{verbatim}
+{"t": "14:32:07", "phase": "fitness", "model": "gemini-2.5-flash",
+ "in": 412, "out": 693, "cost": 0.000477, "total_calls": 47,
+ "running_cost": 0.022419}
+{"t": "14:33:51", "phase": "crossover", "model": "gemini-2.5-pro",
+ "in": 228, "out": 1340, "cost": 0.013685, "total_calls": 48,
+ "running_cost": 0.036104}
+\end{verbatim}
+
+The \texttt{out} field includes both visible response tokens and thinking tokens.
+The \texttt{cost} field is computed from the \texttt{PRICING} table in
+\texttt{cost\_tracker.py} using the exact token counts reported by the SDK.
 
 
 % ======================================================================
@@ -371,6 +599,11 @@ Anthropic, ``Pricing --- Claude API Docs,''
 \url{https://docs.anthropic.com/en/docs/about-claude/pricing},
 accessed April 2026.
 
+\bibitem{vertex-pricing}
+Google Cloud, ``Vertex AI pricing --- Generative AI,''
+\url{https://cloud.google.com/vertex-ai/generative-ai/pricing},
+accessed April 2026.
+
 \bibitem{gaapo}
 X.~S\'{e}cheresse, J.-Y.~Guilbert-Ly, and A.~Villedieu de Torcy,
 ``GAAPO: Genetic algorithmic applied to prompt optimization,''
@@ -381,12 +614,6 @@ X.~S\'{e}cheresse, J.-Y.~Guilbert-Ly, and A.~Villedieu de Torcy,
 Q.~Guo \emph{et al.},
 ``Connecting large language models with evolutionary algorithms yields powerful prompt optimizers,''
 in \emph{Proc.\ ICLR}, 2024.
-
-\bibitem{apps}
-D.~Hendrycks \emph{et al.},
-``Measuring coding challenge competence with APPS,''
-\emph{NeurIPS Datasets and Benchmarks}, 2021,
-\url{https://arxiv.org/abs/2105.09938}.
 
 \end{thebibliography}
 

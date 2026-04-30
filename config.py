@@ -1,70 +1,46 @@
-"""
-config.py — All hyperparameters and paths in one place.
-Edit here; everything else reads from this module.
-"""
-
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-ROOT         = Path(__file__).parent.parent
-APPS_TRAIN   = ROOT / "Dataset Examples" / "APPS" / "train"
-APPS_TEST    = ROOT / "Dataset Examples" / "APPS" / "test"
+ROOT         = Path(__file__).parent
+APPS_TRAIN   = ROOT / "Dataset" / "APPS" / "train"
+APPS_TEST    = ROOT / "Dataset" / "APPS" / "test"
 RESULTS_DIR  = Path(__file__).parent / "results"
 
-# ---------------------------------------------------------------------------
-# Dataset
-# ---------------------------------------------------------------------------
-# 300 pre-selected Codeforces problems (stdin/stdout, full C++ programs).
-# Distribution: 100×(800|1000), 100×(1100|1200|1300), 65×(1400|1500), 35×(1600|1700)
-EVOLUTION_SIZE  = 100   # fixed pool for fitness evaluation during GA
-HOLDOUT_SIZE    = 200   # held-out for final within-distribution test
+# 65 problems for evolution, 200 held out for test
+EVOLUTION_SIZE  = 65
+HOLDOUT_SIZE    = 200
 RANDOM_SEED     = 42
-EARLY_STOP_FAILURES = 3   # stop running test cases after this many consecutive failures
+EARLY_STOP_FAILURES = 3
 
-# ---------------------------------------------------------------------------
-# Genetic Algorithm
-# ---------------------------------------------------------------------------
-POPULATION_SIZE   = 15
-GENERATIONS       = 20
-ELITISM_COUNT     = 2   # top-N individuals carried unchanged to next generation
-TOURNAMENT_SIZE   = 3   # contestants per tournament selection draw
+POPULATION_SIZE   = 5
+GENERATIONS       = 12
+ELITISM_COUNT        = 0
+CROSSOVER_ONLY_SLOTS = 2
+TOURNAMENT_SIZE      = 3
 
-CROSSOVER_RATE      = 0.8   # probability crossover is applied to each offspring
+CROSSOVER_RATE      = 0.8
 
-# Independent per-individual mutation probabilities (can all apply at once)
-MUT_INJECT_PROB   = 0.25   # add a new instructional strategy
-MUT_DELETE_PROB   = 0.15   # drop a random sentence
-MUT_REPHRASE_PROB = 0.10   # rewrite without changing meaning
+MUT_INJECT_PROB   = 0.25
+MUT_DELETE_PROB   = 0.15
+MUT_REPHRASE_PROB = 0.10
 
-# ---------------------------------------------------------------------------
-# LLM  (Claude Code CLI — uses Claude.ai subscription, no API key required)
-# ---------------------------------------------------------------------------
-# Model being optimised — generates code, evaluated for fitness.
-TARGET_MODEL = "claude-haiku-4-5-20251001"
+# vertex ai / gemini setup
+SERVICE_ACCOUNT_PATH = Path(__file__).parent / "service-account.json"
+GCP_REGION           = "us-central1"
 
-# Model used for crossover / mutation meta-prompts — needs creativity.
-OPTIMIZER_MODEL = "claude-sonnet-4-6"
+TARGET_MODEL    = "gemini-2.5-flash"
+OPTIMIZER_MODEL = "gemini-2.5-pro"
 
-# NOTE: The `claude -p` CLI does not expose a --temperature flag.
-#       TARGET_TEMPERATURE (0.0) and OPTIMIZER_TEMPERATURE (0.7) are retained
-#       below as documentation, but they have no effect on CLI calls.
 TARGET_TEMPERATURE    = 0.0
 OPTIMIZER_TEMPERATURE = 0.7
 
-MAX_CODE_TOKENS     = 1024   # kept for documentation; not enforced by CLI
-MAX_OPERATOR_TOKENS = 600    # kept for documentation; not enforced by CLI
+API_FALLBACK_MAX_TOKENS_CODE = 8192
+API_FALLBACK_MAX_TOKENS_OPS  = 700
 
-# Seconds to wait for a single `claude -p` subprocess before timing out.
-# Lowered from 120 → 90 to fail-fast on stuck calls and leave budget for retries.
-CLAUDE_CLI_TIMEOUT = 90
+# stop early if population is homogeneous for PATIENCE consecutive gens
+CONVERGENCE_CV_THRESHOLD = 0.01
+CONVERGENCE_PATIENCE     = 3
+CONVERGENCE_MIN_MEAN     = 0.01
 
-# ---------------------------------------------------------------------------
-# Code execution  (g++ compilation + binary runs)
-# ---------------------------------------------------------------------------
-EXEC_TIMEOUT    = 2    # seconds per test-case binary run
-COMPILE_TIMEOUT = 15   # seconds allowed for g++ compilation
-PARALLEL_EVALS  = 5    # problems evaluated simultaneously per individual
-                       # (lowered from 10 → 5 to eliminate CLI contention that
-                       # caused ~19% empty-response failures)
+EXEC_TIMEOUT    = 2
+COMPILE_TIMEOUT = 15
+PARALLEL_EVALS  = 5

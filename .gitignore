@@ -1,3 +1,6 @@
+# Google Cloud service account credentials
+service-account.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -214,5 +217,5 @@ __marimo__/
 *.fls
 *.synctex.gz
 
-# --- Runtime output (large / per-run) ---
-results/
+# --- Claude internal ---
+.claude/

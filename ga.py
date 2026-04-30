@@ -1,52 +1,28 @@
-"""
-ga.py — Genetic Algorithm for evolving system-level instruction prompts.
-
-Pipeline summary (one generation):
-    ┌──────────────────────────────────────────────────────────┐
-    │  1. SELECTION    — tournament (size 3), pick 2 parents   │
-    │  2. CROSSOVER    — LLM merges parents (rate 0.8)         │
-    │  3. MUTATION     — inject / delete / rephrase (indep.)   │
-    │  4. FITNESS      — run code on 100 APPS problems         │
-    │  5. REPLACEMENT  — generational with top-2 elitism       │
-    └──────────────────────────────────────────────────────────┘
-
-Selection     : tournament (size 3) — balanced exploration vs exploitation
-Crossover     : LLM-mediated merge — preserves semantic coherence
-Mutation      : 3 independent types — inject(0.25), delete(0.15), rephrase(0.10)
-Elitism       : top 2 — prevents losing the best prompt discovered so far
-Replacement   : generational — entire population (except elites) is replaced
-"""
-
 from __future__ import annotations
 
 import json
 import random
+import statistics
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 import config
 import evaluator
 import llm
 
-# ---------------------------------------------------------------------------
-# Logging infrastructure
-# ---------------------------------------------------------------------------
-# Two log streams per run:
-#   1. progress.log           — human-readable timeline (INFO + DEBUG lines)
-#   2. evaluations_genNN.jsonl — one JSON line per problem evaluation
-# ---------------------------------------------------------------------------
+
 _progress_log: Path | None = None
 _eval_log_dir: Path | None = None
-_log_lock = threading.Lock()
+_log_lock      = threading.Lock()
 _eval_log_lock = threading.Lock()
 
 
 def _log(msg: str, level: str = "INFO") -> None:
-    """Append a timestamped, level-tagged line to progress.log. Thread-safe."""
     line = f"[{time.strftime('%H:%M:%S')}] [{level}] {msg}"
     with _log_lock:
         print(line, flush=True)
@@ -56,19 +32,13 @@ def _log(msg: str, level: str = "INFO") -> None:
 
 
 def _debug(msg: str) -> None:
-    """Shortcut for DEBUG-level log entries."""
     _log(msg, level="DEBUG")
 
 
-def _log_evaluation(entry: dict) -> None:
-    """
-    Append one evaluation record to evaluations_gen{NN}.jsonl.
-    Entry is a pre-built dict; one JSON object per line.
-    Thread-safe.
-    """
+def _log_eval(entry: dict) -> None:
     if _eval_log_dir is None:
         return
-    gen = entry.get("generation", 0)
+    gen  = entry.get("generation", 0)
     path = _eval_log_dir / f"evaluations_gen{gen:02d}.jsonl"
     line = json.dumps(entry, ensure_ascii=False)
     with _eval_log_lock:
@@ -76,326 +46,450 @@ def _log_evaluation(entry: dict) -> None:
             f.write(line + "\n")
 
 
-# ---------------------------------------------------------------------------
-# Individual
-# ---------------------------------------------------------------------------
-
 @dataclass
 class Individual:
-    """One chromosome = one system-level instruction prompt."""
     prompt: str
     fitness: float = -1.0
     uid: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
-    parent_a: str = ""      # uid of parent A (empty for seeds)
-    parent_b: str = ""      # uid of parent B
-    operators: str = ""     # operators applied, e.g. "crossover+inject"
+    parent_a: str = ""
+    parent_b: str = ""
+    operators: str = ""
+    intermediate_steps: dict = field(default_factory=dict)
+    failure_examples: list = field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Fitness
-# ---------------------------------------------------------------------------
-
-def _eval_one_problem(
+def _eval_code(
     gen: int,
-    individual: Individual,
+    ind: Individual,
     prob: dict,
     idx: int,
     total: int,
-) -> float:
-    """
-    Evaluate one problem for one individual. Runs in a thread.
-    Logs a full JSONL record to evaluations_gen{NN}.jsonl.
+    response: Optional[str],
+    llm_time: float,
+) -> tuple[float, Optional[dict]]:
+    if response is None:
+        entry = {
+            "ts":                   time.strftime("%H:%M:%S"),
+            "generation":           gen,
+            "individual_uid":       ind.uid,
+            "individual_operators": ind.operators or "seed",
+            "system_prompt":        ind.prompt,
+            "problem_id":           prob["id"],
+            "problem_rating":       prob.get("rating"),
+            "problem_index":        idx,
+            "llm_call_time_s":      llm_time,
+            "extracted_code":       None,
+            "compile":              {"success": False, "error": "infra_failure", "time_s": 0.0},
+            "test_cases":           [],
+            "tests_total":          len(prob.get("inputs", [])),
+            "tests_run":            0,
+            "early_stopped":        False,
+            "total_test_time_s":    0.0,
+            "score":                -1.0,
+            "score_reason":         "infra_failure",
+        }
+        _log_eval(entry)
+        _log(f"ind={ind.uid}  prob={idx+1}/{total}  id={prob['id']}  score=-1.00  reason=infra_failure")
+        return -1.0, None
 
-    Startup jitter: random 0-2s sleep staggers subprocess launches so that
-    multiple workers don't all spawn `claude -p` at the exact same instant.
-    Addresses CLI contention that previously caused ~19% empty-response failures.
-    """
-    time.sleep(random.uniform(0, 2))
-
-    _debug(f"ind={individual.uid}  prob={idx+1}/{total}  id={prob['id']}  BEGIN (calling Claude)")
-
-    # --- Claude call ---
-    t_llm = time.monotonic()
-    response = llm.generate_code(
-        system_prompt=individual.prompt,
-        question=prob["question"],
-    )
-    llm_time = round(time.monotonic() - t_llm, 3)
-    _debug(f"ind={individual.uid}  prob={idx+1}/{total}  id={prob['id']}  LLM done ({llm_time}s, {len(response)} chars)")
-
-    # --- extract code ---
     code = evaluator.extract_code(response)
     del response
 
-    # --- run tests (verbose) ---
     if not code or not code.strip():
-        test_result = {
-            "score": 0.0,
-            "reason": "empty_response",
-            "compile": {"success": False, "error": None, "time_s": 0.0},
-            "test_cases": [],
-            "tests_total": len(prob.get("inputs", [])),
-            "tests_run": 0,
-            "early_stopped": False,
+        result: dict = {
+            "score":            0.0,
+            "reason":           "empty_response",
+            "compile":          {"success": False, "error": None, "time_s": 0.0},
+            "test_cases":       [],
+            "tests_total":      len(prob.get("inputs", [])),
+            "tests_run":        0,
+            "early_stopped":    False,
             "total_test_time_s": 0.0,
         }
-        _debug(f"ind={individual.uid}  prob={idx+1}/{total}  id={prob['id']}  empty response — skipping compile/tests")
     else:
-        _debug(f"ind={individual.uid}  prob={idx+1}/{total}  id={prob['id']}  compiling + testing ({len(code)} chars of code)")
-        test_result = evaluator.run_tests_verbose(
+        result = evaluator.run_tests_verbose(
             code=code,
             inputs=prob["inputs"],
             outputs=prob["outputs"],
             timeout=config.EXEC_TIMEOUT,
         )
 
-    score = test_result["score"]
-    reason = test_result["reason"]
+    score  = result["score"]
+    reason = result["reason"]
 
-    # --- write full JSONL record ---
     entry = {
         "ts":                   time.strftime("%H:%M:%S"),
         "generation":           gen,
-        "individual_uid":       individual.uid,
-        "individual_operators": individual.operators or "seed",
-        "system_prompt":        individual.prompt,
+        "individual_uid":       ind.uid,
+        "individual_operators": ind.operators or "seed",
+        "system_prompt":        ind.prompt,
         "problem_id":           prob["id"],
         "problem_rating":       prob.get("rating"),
         "problem_index":        idx,
         "llm_call_time_s":      llm_time,
         "extracted_code":       code,
-        "compile":              test_result["compile"],
-        "test_cases":           test_result["test_cases"],
-        "tests_total":          test_result["tests_total"],
-        "tests_run":            test_result["tests_run"],
-        "early_stopped":        test_result["early_stopped"],
-        "total_test_time_s":    test_result["total_test_time_s"],
+        "compile":              result["compile"],
+        "test_cases":           result["test_cases"],
+        "tests_total":          result["tests_total"],
+        "tests_run":            result["tests_run"],
+        "early_stopped":        result["early_stopped"],
+        "total_test_time_s":    result["total_test_time_s"],
         "score":                score,
         "score_reason":         reason,
     }
-    _log_evaluation(entry)
+    _log_eval(entry)
     del entry, code
 
     _log(
-        f"ind={individual.uid}  prob={idx+1}/{total}  id={prob['id']}  "
-        f"score={score:.2f}  reason={reason}  llm={llm_time}s"
+        f"ind={ind.uid}  prob={idx+1}/{total}  id={prob['id']}  "
+        f"rating={prob.get('rating',0)}  score={score:.2f}  reason={reason}  "
+        f"llm={llm_time:.1f}s"
     )
-    return score
+
+    fail = None
+    if score < 1.0 and reason != "infra_failure":
+        tc_list = result.get("test_cases", [])
+        first_fail = next((tc for tc in tc_list if not tc["passed"]), None)
+        fail = {
+            "problem_id":    prob["id"],
+            "rating":        prob.get("rating"),
+            "reason":        reason,
+            "expected":      (first_fail["expected"][:200] if first_fail else ""),
+            "actual":        (first_fail["actual"][:200] if first_fail and first_fail["actual"] else ""),
+            "compile_error": (result["compile"].get("error", "")[:200] if reason == "compile_fail" else ""),
+        }
+
+    del result
+    return score, fail
 
 
-def compute_fitness(gen: int, individual: Individual, problems: list[dict]) -> float:
-    """
-    Evaluate a prompt on the evolution pool using parallel threads.
+def _eval_one_problem(gen: int, ind: Individual, prob: dict, idx: int, total: int) -> tuple[float, Optional[dict]]:
+    time.sleep(random.uniform(0, 1))
 
-    PARALLEL_EVALS problems are evaluated simultaneously per individual.
-    Each thread: LLM generates C++ → extract → compile with g++ → run tests → log JSONL.
+    t0 = time.monotonic()
+    try:
+        response = llm.generate_code(system_prompt=ind.prompt, question=prob["question"])
+    except llm.LLMCallError as exc:
+        llm_time = round(time.monotonic() - t0, 3)
+        _log(f"ind={ind.uid}  prob={idx+1}/{total}  id={prob['id']}  INFRA FAILURE ({llm_time:.1f}s): {exc}", level="ERROR")
+        return _eval_code(gen, ind, prob, idx, total, None, llm_time)
 
-    Fitness = mean score across all problems.
-    """
-    _debug(f"compute_fitness BEGIN  gen={gen}  ind={individual.uid}  problems={len(problems)}  workers={config.PARALLEL_EVALS}")
+    llm_time = round(time.monotonic() - t0, 3)
+    return _eval_code(gen, ind, prob, idx, total, response, llm_time)
+
+
+def compute_fitness(gen: int, ind: Individual, problems: list[dict]) -> float:
     t0 = time.monotonic()
     scores = [0.0] * len(problems)
+    fails: list[dict] = []
+    lock = threading.Lock()
+
+    # print(f"computing fitness for {ind.uid} gen={gen}")
 
     with ThreadPoolExecutor(max_workers=config.PARALLEL_EVALS) as executor:
         futures = {
-            executor.submit(_eval_one_problem, gen, individual, prob, i, len(problems)): i
+            executor.submit(_eval_one_problem, gen, ind, prob, i, len(problems)): i
             for i, prob in enumerate(problems)
         }
-        _debug(f"compute_fitness  gen={gen}  ind={individual.uid}  submitted {len(futures)} futures")
-
-        completed = 0
+        done = 0
         for future in as_completed(futures):
             idx = futures[future]
             try:
-                scores[idx] = future.result()
+                score, f = future.result()
+                scores[idx] = score
+                if f is not None:
+                    with lock:
+                        fails.append(f)
             except Exception as exc:
-                _log(f"ind={individual.uid}  prob={idx+1}  ERROR: {exc}", level="ERROR")
-                scores[idx] = 0.0
-            completed += 1
-            if completed % 10 == 0:
-                _debug(f"compute_fitness  gen={gen}  ind={individual.uid}  progress {completed}/{len(problems)}")
+                _log(f"ind={ind.uid}  prob={idx+1}  UNEXPECTED ERROR: {exc}", level="ERROR")
+                scores[idx] = -1.0
+            done += 1
+            if done % 10 == 0 or done == len(problems):
+                _log(f"ind={ind.uid}  progress {done}/{len(problems)}  gen={gen}")
 
+    _pick_failures(ind, fails)
     fitness = sum(scores) / len(scores)
     elapsed = round(time.monotonic() - t0, 1)
-    _debug(f"compute_fitness END  gen={gen}  ind={individual.uid}  fitness={fitness:.4f}  elapsed={elapsed}s")
+    _log(f"ind={ind.uid}  DONE  gen={gen}  fitness={fitness:.4f}  elapsed={elapsed}s")
     return fitness
 
 
-# ---------------------------------------------------------------------------
-# Selection
-# ---------------------------------------------------------------------------
+def _pick_failures(ind: Individual, fails: list[dict]) -> None:
+    priority = {"compile_fail": 0, "all_fail": 1, "all_fail_early_stop": 1, "partial_pass": 2}
+    fails.sort(key=lambda f: priority.get(f["reason"], 3))
+    seen: set[str] = set()
+    picked: list[dict] = []
+    for f in fails:
+        if f["reason"] not in seen or len(picked) < 3:
+            picked.append(f)
+            seen.add(f["reason"])
+        if len(picked) >= 5:
+            break
+    ind.failure_examples = picked
+
+
+def rng_state_to_dict(state: tuple) -> dict:
+    version, internalstate, gauss_next = state
+    return {"version": version, "internalstate": list(internalstate), "gauss_next": gauss_next}
+
+
+def rng_state_from_dict(d: dict) -> tuple:
+    return (d["version"], tuple(d["internalstate"]), d["gauss_next"])
+
 
 def tournament_select(population: list[Individual], rng: random.Random) -> Individual:
-    """Pick TOURNAMENT_SIZE random individuals, return the fittest."""
     contestants = rng.sample(population, config.TOURNAMENT_SIZE)
-    return max(contestants, key=lambda ind: ind.fitness)
+    return max(contestants, key=lambda x: x.fitness)
 
 
-# ---------------------------------------------------------------------------
-# Crossover + mutation → one offspring
-# ---------------------------------------------------------------------------
+def roulette_select(population: list[Individual], rng: random.Random) -> Individual:
+    fits = [max(ind.fitness, 0.0) for ind in population]
+    total = sum(fits)
+    if total == 0:
+        return rng.choice(population)
+    r = rng.uniform(0, total)
+    cum = 0.0
+    for ind, f in zip(population, fits):
+        cum += f
+        if cum >= r:
+            return ind
+    return population[-1]
 
-def breed(
-    parent_a: Individual,
-    parent_b: Individual,
-    rng: random.Random,
-) -> Individual:
-    """
-    Produce one offspring from two parents.
 
-    1. Crossover (probability CROSSOVER_RATE):
-        The optimizer LLM merges the two parent prompts.
-        If skipped, the offspring copies a random parent's prompt.
+def breed(pa: Individual, pb: Individual, rng: random.Random, allow_mutation: bool = True) -> Individual:
+    ops   = []
+    steps: dict = {}
 
-    2. Mutation (three independent rolls per offspring):
-        - inject   (0.25) — LLM adds a new instructional strategy
-        - delete   (0.15) — LLM removes the weakest sentence
-        - rephrase (0.10) — LLM rewrites without changing meaning
+    combined_fails: list[dict] = []
+    seen_ids: set[str] = set()
+    for f in (pa.failure_examples + pb.failure_examples):
+        if f["problem_id"] not in seen_ids:
+            combined_fails.append(f)
+            seen_ids.add(f["problem_id"])
+    combined_fails = combined_fails[:5]
 
-    Returns an unevaluated Individual (fitness = -1).
-    """
-    ops = []
-    _debug(f"breed BEGIN  parents={parent_a.uid}+{parent_b.uid}")
-
-    # --- crossover ---
     if rng.random() < config.CROSSOVER_RATE:
-        _debug(f"breed  calling crossover LLM")
-        result = llm.crossover(parent_a.prompt, parent_b.prompt)
-        prompt = result if result.strip() else rng.choice([parent_a.prompt, parent_b.prompt])
+        res = llm.crossover(pa.prompt, pb.prompt)
+        prompt = res if res.strip() else rng.choice([pa.prompt, pb.prompt])
         ops.append("crossover")
-        _debug(f"breed  crossover done (prompt={len(prompt)} chars)")
     else:
-        prompt = rng.choice([parent_a.prompt, parent_b.prompt])
+        prompt = rng.choice([pa.prompt, pb.prompt])
         ops.append("copy")
-        _debug(f"breed  copy (skipped crossover)")
 
-    # --- mutations (independent — all three can fire) ---
-    if rng.random() < config.MUT_INJECT_PROB:
-        _debug(f"breed  calling mutate_inject")
-        result = llm.mutate_inject(prompt)
-        prompt = result if result.strip() else prompt
-        ops.append("inject")
-    if rng.random() < config.MUT_DELETE_PROB:
-        _debug(f"breed  calling mutate_delete")
-        result = llm.mutate_delete(prompt)
-        prompt = result if result.strip() else prompt
-        ops.append("delete")
-    if rng.random() < config.MUT_REPHRASE_PROB:
-        _debug(f"breed  calling mutate_rephrase")
-        result = llm.mutate_rephrase(prompt)
-        prompt = result if result.strip() else prompt
-        ops.append("rephrase")
+    steps["after_crossover"] = prompt
 
-    _debug(f"breed END  ops={'+'.join(ops)}  final_prompt={len(prompt)} chars")
+    if allow_mutation:
+        if rng.random() < config.MUT_INJECT_PROB:
+            res = llm.mutate_inject(prompt, failure_examples=combined_fails)
+            prompt = res if res.strip() else prompt
+            ops.append("inject")
+            steps["after_inject"] = prompt
+
+        if rng.random() < config.MUT_DELETE_PROB:
+            res = llm.mutate_delete(prompt)
+            prompt = res if res.strip() else prompt
+            ops.append("delete")
+            steps["after_delete"] = prompt
+
+        if rng.random() < config.MUT_REPHRASE_PROB:
+            res = llm.mutate_rephrase(prompt)
+            prompt = res if res.strip() else prompt
+            ops.append("rephrase")
+            steps["after_rephrase"] = prompt
+
+    op_str = "+".join(ops)
+    _log(f"bred  parents={pa.uid}+{pb.uid}  ops={op_str}  len={len(prompt)}")
 
     return Individual(
         prompt=prompt,
-        parent_a=parent_a.uid,
-        parent_b=parent_b.uid,
-        operators="+".join(ops),
+        parent_a=pa.uid,
+        parent_b=pb.uid,
+        operators=op_str,
+        intermediate_steps=steps,
     )
 
-
-# ---------------------------------------------------------------------------
-# Main GA loop
-# ---------------------------------------------------------------------------
 
 def run(
     seed_prompts: list[str],
     problems: list[dict],
     run_dir: Path | None = None,
     on_generation=None,
+    resume_population: Optional[list[Individual]] = None,
+    resume_start_gen: int = 0,
+    resume_history: Optional[list[dict]] = None,
+    resume_rng_state: Optional[dict] = None,
+    selection_scheme: str = "tournament",
+    elitism_count: Optional[int] = None,
 ) -> tuple[Individual, list[dict]]:
-    """
-    Run the full genetic algorithm.
-
-    Args:
-        seed_prompts   — initial population prompts (len == POPULATION_SIZE)
-        problems       — evolution pool (100 APPS problems)
-        run_dir        — results directory; progress.log is written here
-        on_generation  — optional callback(gen: int, population, stats)
-                        called after each generation for checkpointing
-
-    Returns:
-        (best_individual, history)
-    """
     global _progress_log, _eval_log_dir
     if run_dir is not None:
         _progress_log = run_dir / "progress.log"
         _eval_log_dir = run_dir
-        _debug(f"ga.run  logging to {_progress_log}")
-        _debug(f"ga.run  evaluations JSONL dir = {_eval_log_dir}")
 
-    rng = random.Random(config.RANDOM_SEED)
-    history: list[dict] = []
+    scheme = selection_scheme.lower()
+    select = roulette_select if scheme == "roulette" else tournament_select
 
-    # --- initialise population ---
-    _debug(f"ga.run  creating initial population of {len(seed_prompts)} individuals")
-    population = [Individual(prompt=p, operators="seed") for p in seed_prompts]
-    _log(f"[gen 0] evaluating {len(population)} seed individuals …")
-    for seed_idx, ind in enumerate(population):
-        _debug(f"[gen 0] evaluating seed {seed_idx+1}/{len(population)}  uid={ind.uid}")
-        ind.fitness = compute_fitness(0, ind, problems)
-        _log(f"  SEED DONE  {ind.uid}  fitness={ind.fitness:.4f}")
+    elitism = elitism_count if elitism_count is not None else config.ELITISM_COUNT
+    _log(f"[GA] selection={scheme}  elitism={elitism}")
 
-    for gen in range(1, config.GENERATIONS + 1):
-        # --- record stats ---
+    rng     = random.Random(config.RANDOM_SEED)
+    history: list[dict] = list(resume_history) if resume_history else []
+
+    if resume_population is not None:
+        population = resume_population
+        _log(f"[RESUME] restored {len(population)} individuals from gen {resume_start_gen}")
+
+        if resume_rng_state is not None:
+            rng.setstate(rng_state_from_dict(resume_rng_state))
+            _log("[RESUME] RNG state restored")
+        else:
+            _log("[RESUME] WARNING: no RNG state")
+
+        loop_start = resume_start_gen + 1
+
+    else:
+        _log(f"Evaluating {len(seed_prompts)} seeds on {len(problems)} problems ...")
+        population = [Individual(prompt=p, operators="seed") for p in seed_prompts]
+
+        existing: dict[int, dict] = {}
+        if run_dir is not None:
+            for ckpt in sorted(run_dir.glob("seed_??_*.json")):
+                try:
+                    data = json.loads(ckpt.read_text())
+                    idx = data["seed_idx"]
+                    existing[idx] = data
+                    _log(f"[gen 0] seed checkpoint: {ckpt.name}  fitness={data['fitness']:.4f}")
+                except Exception as exc:
+                    _log(f"[gen 0] WARNING: could not load {ckpt.name}: {exc}", level="WARN")
+
+        for i, ind in enumerate(population):
+            if i in existing:
+                saved = existing[i]
+                ind.uid             = saved["uid"]
+                ind.fitness         = saved["fitness"]
+                ind.failure_examples = saved.get("failure_examples", [])
+                _log(f"[gen 0] seed {i+1}/{len(population)}  uid={ind.uid}  RESTORED  fitness={ind.fitness:.4f}")
+                continue
+
+            _log(f"[gen 0] seed {i+1}/{len(population)}  uid={ind.uid}  evaluating ...")
+            ind.fitness = compute_fitness(0, ind, problems)
+            _log(f"[gen 0] seed {i+1}/{len(population)}  uid={ind.uid}  fitness={ind.fitness:.4f}")
+
+            if run_dir is not None:
+                ckpt_path = run_dir / f"seed_{i:02d}_{ind.uid}.json"
+                ckpt_path.write_text(json.dumps({
+                    "seed_idx":         i,
+                    "uid":              ind.uid,
+                    "prompt":           ind.prompt,
+                    "fitness":          ind.fitness,
+                    "failure_examples": ind.failure_examples,
+                    "operators":        "seed",
+                }))
+
+        loop_start = 1
+
+    stagnant = 0
+    last_gen  = loop_start - 1
+
+    for gen in range(loop_start, config.GENERATIONS + 1):
         population.sort(key=lambda x: x.fitness, reverse=True)
         fits = [x.fitness for x in population]
+
+        valid = [f for f in fits if f >= 0.0]
+        if len(valid) >= 2:
+            std  = statistics.pstdev(valid)
+            mean = sum(valid) / len(valid)
+        else:
+            std  = 0.0
+            mean = sum(fits) / len(fits) if fits else 0.0
+
         stats = {
             "generation": gen - 1,
-            "best": max(fits),
-            "mean": sum(fits) / len(fits),
-            "worst": min(fits),
-            "best_uid": population[0].uid,
+            "best":    max(fits),
+            "mean":    sum(fits) / len(fits),
+            "worst":   min(fits),
+            "std":     round(std, 6),
+            "cv":      round(std / mean, 6) if mean > config.CONVERGENCE_MIN_MEAN else -1.0,
+            "best_uid":    population[0].uid,
             "best_prompt": population[0].prompt,
         }
-        history.append(stats)
-        _log(
-            f"[gen {gen-1}] STATS  best={stats['best']:.4f}  "
-            f"mean={stats['mean']:.4f}  worst={stats['worst']:.4f}"
-        )
+
+        last_recorded = history[-1]["generation"] if history else -1
+        if stats["generation"] > last_recorded:
+            history.append(stats)
+
+        _log(f"[gen {gen-1}] STATS  best={stats['best']:.4f}  mean={stats['mean']:.4f}  worst={stats['worst']:.4f}  std={stats['std']:.4f}")
 
         if on_generation:
-            _debug(f"[gen {gen-1}] saving checkpoint")
-            on_generation(gen - 1, population, stats)
+            on_generation(gen - 1, population, stats, rng.getstate())
 
-        # --- elitism: carry over top ELITISM_COUNT ---
-        new_pop = population[: config.ELITISM_COUNT]
-        _debug(f"[gen {gen}] carrying {config.ELITISM_COUNT} elites: {[e.uid for e in new_pop]}")
+        cv = stats["cv"]
+        if cv >= 0.0 and cv < config.CONVERGENCE_CV_THRESHOLD:
+            stagnant += 1
+            _log(f"[gen {gen-1}] STAGNATION {stagnant}/{config.CONVERGENCE_PATIENCE}  CV={cv:.4f}")
+            if stagnant >= config.CONVERGENCE_PATIENCE:
+                _log(f"[gen {gen-1}] CONVERGENCE — stopping early")
+                break
+        else:
+            stagnant = 0
 
-        # --- breed offspring to fill remaining slots ---
-        _log(f"[gen {gen}] breeding {config.POPULATION_SIZE - config.ELITISM_COUNT} offspring …")
+        t_gen = time.monotonic()
+        _log(f"\n{'─'*60}\n  BREEDING  gen {gen}/{config.GENERATIONS}   [{time.strftime('%H:%M:%S')}]\n{'─'*60}")
+
+        new_pop = population[:elitism]
+        _log(f"[gen {gen}] elites: {[f'{e.uid} ({e.fitness:.4f})' for e in new_pop]}")
+
+        n_off = config.POPULATION_SIZE - elitism
+        _log(f"[gen {gen}] breeding {n_off} offspring ...")
+        off_idx = 0
         while len(new_pop) < config.POPULATION_SIZE:
-            p1 = tournament_select(population, rng)
-            p2 = tournament_select(population, rng)
-            _debug(f"[gen {gen}] breed #{len(new_pop) - config.ELITISM_COUNT + 1}  parents={p1.uid}+{p2.uid}")
-            child = breed(p1, p2, rng)
+            p1 = select(population, rng)
+            p2 = select(population, rng)
+            allow_mut = off_idx >= config.CROSSOVER_ONLY_SLOTS
+            child = breed(p1, p2, rng, allow_mutation=allow_mut)
             new_pop.append(child)
+            off_idx += 1
 
-        # --- evaluate only the new offspring ---
-        _log(f"[gen {gen}] evaluating {config.POPULATION_SIZE - config.ELITISM_COUNT} offspring …")
-        for off_idx, ind in enumerate(new_pop[config.ELITISM_COUNT:]):
-            _debug(f"[gen {gen}] evaluating offspring {off_idx+1}/{config.POPULATION_SIZE - config.ELITISM_COUNT}  uid={ind.uid}  ops={ind.operators}")
+        offspring = new_pop[elitism:]
+        _log(f"[gen {gen}] evaluating {len(offspring)} offspring on {len(problems)} problems ...")
+
+        for i, ind in enumerate(offspring):
+            _log(f"[gen {gen}] offspring {i+1}/{len(offspring)}  uid={ind.uid}  ops={ind.operators}  evaluating ...")
             ind.fitness = compute_fitness(gen, ind, problems)
-            _log(f"  OFFSPRING DONE  {ind.uid}  fitness={ind.fitness:.4f}  ops={ind.operators}")
+            _log(f"[gen {gen}] offspring {i+1}/{len(offspring)}  uid={ind.uid}  fitness={ind.fitness:.4f}")
 
         population = new_pop
+        population.sort(key=lambda x: x.fitness, reverse=True)
 
-    # --- final stats ---
+        elapsed_gen = round(time.monotonic() - t_gen, 1)
+        _log(f"[gen {gen}] LEADERBOARD  (took {elapsed_gen}s)")
+        for rank, ind in enumerate(population, 1):
+            _log(f"  #{rank}  uid={ind.uid}  fitness={ind.fitness:.4f}  ops={ind.operators or 'seed'}")
+
+        last_gen = gen
+
     population.sort(key=lambda x: x.fitness, reverse=True)
     fits = [x.fitness for x in population]
-    history.append({
-        "generation": config.GENERATIONS,
-        "best": max(fits),
-        "mean": sum(fits) / len(fits),
-        "worst": min(fits),
-        "best_uid": population[0].uid,
+
+    valid = [f for f in fits if f >= 0.0]
+    std   = statistics.pstdev(valid) if len(valid) >= 2 else 0.0
+    mean  = sum(valid) / len(valid) if valid else 0.0
+    cv    = round(std / mean, 6) if mean > config.CONVERGENCE_MIN_MEAN else -1.0
+
+    final = {
+        "generation": last_gen,
+        "best":   max(fits),
+        "mean":   sum(fits) / len(fits),
+        "worst":  min(fits),
+        "std":    round(std, 6),
+        "cv":     cv,
+        "best_uid":    population[0].uid,
         "best_prompt": population[0].prompt,
-    })
-    _log(
-        f"[gen {config.GENERATIONS}] FINAL  best={max(fits):.4f}  "
-        f"mean={sum(fits)/len(fits):.4f}"
-    )
+    }
+    last_recorded = history[-1]["generation"] if history else -1
+    if final["generation"] > last_recorded:
+        history.append(final)
+
+    _log(f"\n{'═'*60}\n  GA DONE  gen={last_gen}  best={max(fits):.4f}  mean={sum(fits)/len(fits):.4f}\n{'═'*60}")
 
     return population[0], history
